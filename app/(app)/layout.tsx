@@ -26,9 +26,7 @@ export default function AuthenticatedLayout ({
     if (!hasCheckedAuth.current) {
       hasCheckedAuth.current = true
       if (!isAuthenticated()) {
-        setAuthStatus('redirecting')
-        const redirectUrl = `/login?redirect=${encodeURIComponent(pathname)}`
-        router.push(redirectUrl)
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}`)
         return
       }
 
@@ -36,7 +34,7 @@ export default function AuthenticatedLayout ({
         try {
           const response = await api.getMe()
           const role = response.data?.role
-          if (!role || !ALLOWED_ROLES.includes(role)) {
+          if (!role || !ALLOWED_ROLES.includes(role as typeof ALLOWED_ROLES[number])) {
             removeToken()
             setAuthStatus('redirecting')
             router.push(`/login?redirect=${encodeURIComponent(pathname)}`)
