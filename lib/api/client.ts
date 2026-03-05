@@ -71,6 +71,30 @@ export interface Task {
   assigned_to?: TaskUserRef
 }
 
+export type TaskActivityType =
+  | 'TASK.CREATED'
+  | 'TASK.STATUS_CHANGED'
+  | 'TASK.ASSIGNED_CHANGED'
+  | 'TASK.OWNER_CHANGED'
+  | 'TASK.TITLE_CHANGED'
+  | 'TASK.BODY_CHANGED'
+  | 'TASK.COMMENT_ADDED'
+
+export type TaskActivityVisibility = 'SHARED' | 'INTERNAL_ONLY'
+
+export interface TaskActivity {
+  id: string
+  task_id: string
+  type: TaskActivityType
+  actor_type: 'INTERNAL_USER' | 'EXTERNAL_USER'
+  actor_id: string
+  actor: TaskUserRef | null
+  comment_body: string | null
+  data: Record<string, string> | null
+  visibility: TaskActivityVisibility
+  created_at: string
+}
+
 async function fetchApi<T> (
   endpoint: string,
   options: RequestInit = {}
@@ -167,5 +191,33 @@ export const api = {
 
   async deleteTask (id: string): Promise<void> {
     await fetchApi<never>(`/v1/admin/tasks/${id}`, { method: 'DELETE' })
+  },
+
+  async getTaskActivity (
+    id: string,
+    params?: {
+      visibility?: TaskActivityVisibility
+      limit?: number
+      cursor_created_at?: string
+      cursor_id?: string
+    }
+  ): Promise<ApiResponse<TaskActivity[]>> {
+    const query = new URLSearchParams()
+    if (params?.visibility) query.set('visibility', params.visibility)
+    if (params?.limit != null) query.set('limit', String(params.limit))
+    if (params?.cursor_created_at) query.set('cursor_created_at', params.cursor_created_at)
+    if (params?.cursor_id) query.set('cursor_id', params.cursor_id)
+    const qs = query.toString()
+    return fetchApi<TaskActivity[]>(`/v1/tasks/${id}/activity${qs ? `?${qs}` : ''}`)
+  },
+
+  async addTaskComment (
+    id: string,
+    payload: { comment_body: string; visibility?: TaskActivityVisibility }
+  ): Promise<ApiResponse<TaskActivity>> {
+    return fetchApi<TaskActivity>(`/v1/tasks/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
   }
 }

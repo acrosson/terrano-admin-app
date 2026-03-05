@@ -10,7 +10,9 @@ import {
   CardHeader,
   Chip,
   Button,
+  ButtonGroup,
   Spinner,
+  Textarea,
   User,
   Select,
   SelectItem,
@@ -24,7 +26,9 @@ import {
   DropdownMenu,
   DropdownItem
 } from '@heroui/react'
-import { api, type Task, type TaskUserRef, type TaskStatus } from '@/lib/api/client'
+import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility } from '@/lib/api/client'
+
+const ACTIVITY_LIMIT = 50
 
 function getStatusColor (status: Task['status']) {
   switch (status) {
@@ -52,6 +56,30 @@ function formatDateTime (dateString: string) {
     hour: 'numeric',
     minute: '2-digit'
   })
+}
+
+function formatStatus (s: string): string {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function formatActivityLabel (item: TaskActivity): string {
+  const { type, data } = item
+  switch (type) {
+    case 'TASK.CREATED':
+      return 'created the task'
+    case 'TASK.STATUS_CHANGED':
+      return `changed status from ${formatStatus(data?.from ?? '')} → ${formatStatus(data?.to ?? '')}`
+    case 'TASK.ASSIGNED_CHANGED':
+      return 'changed the assignee'
+    case 'TASK.OWNER_CHANGED':
+      return 'changed the owner'
+    case 'TASK.TITLE_CHANGED':
+      return 'updated the title'
+    case 'TASK.BODY_CHANGED':
+      return 'updated the description'
+    default:
+      return String(type)
+  }
 }
 
 function TaskUser ({ user }: { user: TaskUserRef }) {
@@ -88,6 +116,15 @@ export default function TaskDetailPage () {
   const [deleting, setDeleting] = useState(false)
   const bodyViewRef = useRef<HTMLButtonElement>(null)
 
+  // Activity
+  const [activity, setActivity] = useState<TaskActivity[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [hasMoreActivity, setHasMoreActivity] = useState(false)
+  const [activityCursor, setActivityCursor] = useState<{ created_at: string; id: string } | null>(null)
+  const [commentBody, setCommentBody] = useState('')
+  const [commentVisibility, setCommentVisibility] = useState<TaskActivityVisibility>('SHARED')
+  const [submittingComment, setSubmittingComment] = useState(false)
+
   const statusOptions: Array<{ value: TaskStatus; label: string }> = [
     { value: 'CREATED', label: 'Created' },
     { value: 'IN_PROGRESS', label: 'In Progress' },
@@ -117,10 +154,33 @@ export default function TaskDetailPage () {
     fetchTask()
   }, [taskId])
 
-  function handleStartEditTitle () {
-    if (!task) return
-    setEditTitle(task.title)
-    setIsEditingTitle(true)
+  useEffect(() => {
+    if (!taskId) return
+
+    async function loadInitialActivity () {
+      setActivityLoading(true)
+      try {
+        const response = await api.getTaskActivity(taskId, { limit: ACTIVITY_LIMIT })
+        const items = response.data ?? []
+        setActivity(items)
+        if (items.length >= ACTIVITY_LIMIT) {
+          const last = items[items.length - 1]
+          setActivityCursor({ created_at: last.created_at, id: last.id })
+          setHasMoreActivity(true)
+        }
+      } catch {
+        // silently fail — activity is non-critical
+      } finally {
+        setActivityLoading(false)
+      }
+    }
+
+    loadInitialActivity()
+  }, [taskId])
+
+  function getActorName (item: TaskActivity): string {
+    if (item.actor) return `${item.actor.first_name} ${item.actor.last_name}`
+    return item.actor_type === 'EXTERNAL_USER' ? 'Member' : 'Staff'
   }
 
   function handleStatusChange (keys: Iterable<unknown>) {
@@ -165,6 +225,12 @@ export default function TaskDetailPage () {
       setDeleting(false)
       setDeleteModalOpen(false)
     }
+  }
+
+  function handleStartEditTitle () {
+    if (!task) return
+    setEditTitle(task.title)
+    setIsEditingTitle(true)
   }
 
   async function handleSaveTitle () {
@@ -213,6 +279,50 @@ export default function TaskDetailPage () {
     } finally {
       setSaving(false)
       setIsEditingBody(false)
+    }
+  }
+
+  async function handleLoadMoreActivity () {
+    if (!activityCursor || activityLoading) return
+    setActivityLoading(true)
+    try {
+      const response = await api.getTaskActivity(taskId, {
+        limit: ACTIVITY_LIMIT,
+        cursor_created_at: activityCursor.created_at,
+        cursor_id: activityCursor.id
+      })
+      const items = response.data ?? []
+      setActivity(prev => [...prev, ...items])
+      if (items.length >= ACTIVITY_LIMIT) {
+        const last = items[items.length - 1]
+        setActivityCursor({ created_at: last.created_at, id: last.id })
+      } else {
+        setActivityCursor(null)
+        setHasMoreActivity(false)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
+  async function handleSubmitComment () {
+    if (!commentBody.trim()) return
+    setSubmittingComment(true)
+    try {
+      const response = await api.addTaskComment(taskId, {
+        comment_body: commentBody.trim(),
+        visibility: commentVisibility
+      })
+      if (response.data) {
+        setActivity(prev => [...prev, response.data!])
+        setCommentBody('')
+      }
+    } catch (err) {
+      console.error('Failed to add comment:', err)
+    } finally {
+      setSubmittingComment(false)
     }
   }
 
@@ -356,11 +466,11 @@ export default function TaskDetailPage () {
               <button
                 ref={bodyViewRef}
                 type="button"
-                onClick={handleStartEditBody}
+                onDoubleClick={handleStartEditBody}
                 className="w-full rounded-lg text-left transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-zinc-900 dark:prose-headings:text-zinc-100 prose-p:text-zinc-900 dark:prose-p:text-zinc-100 prose-strong:text-zinc-900 dark:prose-strong:text-zinc-100 prose-code:text-zinc-900 dark:prose-code:text-zinc-100 prose-pre:bg-zinc-100 dark:prose-pre:bg-zinc-800 prose-pre:text-zinc-900 dark:prose-pre:text-zinc-100 prose-th:border-zinc-200 dark:prose-th:border-zinc-600 prose-td:border-zinc-200 dark:prose-td:border-zinc-600 cursor-text min-h-[8rem]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.body || 'Click to add body...'}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{task.body || 'Double-click to add body...'}</ReactMarkdown>
                 </div>
               </button>
             )}
@@ -407,6 +517,107 @@ export default function TaskDetailPage () {
           )}
         </CardBody>
       </Card>
+
+      {/* Activity Timeline */}
+      <div className="mt-6">
+        <h2 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-100">Activity</h2>
+
+        {activityLoading && activity.length === 0 ? (
+          <div className="flex justify-center py-8">
+            <Spinner size="sm" />
+          </div>
+        ) : activity.length === 0 ? (
+          <p className="py-4 text-sm text-zinc-500 dark:text-zinc-400">No activity yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {activity.map(item => (
+              item.type === 'TASK.COMMENT_ADDED' ? (
+                <div key={item.id} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      {getActorName(item)}
+                    </span>
+                    {item.visibility === 'INTERNAL_ONLY' && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                        Internal only
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">
+                      {formatDateTime(item.created_at)}
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                    {item.comment_body}
+                  </div>
+                </div>
+              ) : (
+                <div key={item.id} className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                  <div className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{getActorName(item)}</span>
+                  <span>{formatActivityLabel(item)}</span>
+                  <span className="ml-auto whitespace-nowrap text-xs text-zinc-400 dark:text-zinc-500">
+                    {formatDateTime(item.created_at)}
+                  </span>
+                </div>
+              )
+            ))}
+
+            {hasMoreActivity && (
+              <div className="flex justify-center pt-2">
+                <Button variant="light" size="sm" onPress={handleLoadMoreActivity} isLoading={activityLoading}>
+                  Load more
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Comment form */}
+        <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+          <Textarea
+            value={commentBody}
+            onValueChange={setCommentBody}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                handleSubmitComment()
+              }
+            }}
+            placeholder="Add a comment..."
+            minRows={3}
+            isDisabled={submittingComment}
+            variant="bordered"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <ButtonGroup size="sm" variant="bordered">
+              <Button
+                onPress={() => setCommentVisibility('SHARED')}
+                color={commentVisibility === 'SHARED' ? 'primary' : 'default'}
+                variant={commentVisibility === 'SHARED' ? 'solid' : 'bordered'}
+              >
+                Shared
+              </Button>
+              <Button
+                onPress={() => setCommentVisibility('INTERNAL_ONLY')}
+                color={commentVisibility === 'INTERNAL_ONLY' ? 'warning' : 'default'}
+                variant={commentVisibility === 'INTERNAL_ONLY' ? 'solid' : 'bordered'}
+              >
+                Internal only
+              </Button>
+            </ButtonGroup>
+            <Button
+              size="sm"
+              color="primary"
+              onPress={handleSubmitComment}
+              isLoading={submittingComment}
+              isDisabled={!commentBody.trim()}
+              className="ml-auto"
+            >
+              Comment
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <Modal
         isOpen={statusModalOpen}
