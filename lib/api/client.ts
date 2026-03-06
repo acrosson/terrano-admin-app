@@ -182,7 +182,7 @@ export const api = {
     })
   },
 
-  async updateTask (id: string, payload: { title?: string; body?: string; status?: TaskStatus }): Promise<ApiResponse<Task>> {
+  async updateTask (id: string, payload: { title?: string; body?: string; status?: TaskStatus; assigned_to_id?: string; owned_by_id?: string }): Promise<ApiResponse<Task>> {
     return fetchApi<Task>(`/v1/admin/tasks/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload)
@@ -213,7 +213,7 @@ export const api = {
 
   async addTaskComment (
     id: string,
-    payload: { comment_body: string; visibility?: TaskActivityVisibility }
+    payload: { comment_body: string; visibility?: TaskActivityVisibility; mention_ids?: string[] }
   ): Promise<ApiResponse<TaskActivity>> {
     return fetchApi<TaskActivity>(`/v1/tasks/${id}/comments`, {
       method: 'POST',

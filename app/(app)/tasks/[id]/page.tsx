@@ -12,8 +12,7 @@ import {
   Button,
   ButtonGroup,
   Spinner,
-  Textarea,
-  User,
+  User as HeroUser,
   Select,
   SelectItem,
   Modal,
@@ -26,7 +25,7 @@ import {
   DropdownMenu,
   DropdownItem
 } from '@heroui/react'
-import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility } from '@/lib/api/client'
+import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility, type User } from '@/lib/api/client'
 
 const ACTIVITY_LIMIT = 50
 
@@ -85,7 +84,7 @@ function formatActivityLabel (item: TaskActivity): string {
 function TaskUser ({ user }: { user: TaskUserRef }) {
   const name = `${user.first_name} ${user.last_name}`
   return (
-    <User
+    <HeroUser
       name={name}
       avatarProps={{
         name,
@@ -104,6 +103,9 @@ export default function TaskDetailPage () {
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [assigningUser, setAssigningUser] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const [isEditingBody, setIsEditingBody] = useState(false)
@@ -124,6 +126,12 @@ export default function TaskDetailPage () {
   const [commentBody, setCommentBody] = useState('')
   const [commentVisibility, setCommentVisibility] = useState<TaskActivityVisibility>('SHARED')
   const [submittingComment, setSubmittingComment] = useState(false)
+
+  // Mention picker
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionMap, setMentionMap] = useState<Record<string, string>>({}) // displayName → userId
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const commentRef = useRef<HTMLTextAreaElement>(null)
 
   const statusOptions: Array<{ value: TaskStatus; label: string }> = [
     { value: 'CREATED', label: 'Created' },
@@ -152,6 +160,14 @@ export default function TaskDetailPage () {
     }
 
     fetchTask()
+
+    api.getAdminUsers().then(res => {
+      if (res.data) setUsers(res.data)
+    }).catch(() => {})
+
+    api.getMe().then(res => {
+      if (res.data) setCurrentUser(res.data)
+    }).catch(() => {})
   }, [taskId])
 
   useEffect(() => {
@@ -181,6 +197,136 @@ export default function TaskDetailPage () {
   function getActorName (item: TaskActivity): string {
     if (item.actor) return `${item.actor.first_name} ${item.actor.last_name}`
     return item.actor_type === 'EXTERNAL_USER' ? 'Member' : 'Staff'
+  }
+
+  // Build mentionable users: ADMIN/STAFF users + task.owned_by, excluding current user
+  const mentionableUsers: User[] = (() => {
+    const map = new Map<string, User>()
+    users
+      .filter(u => u.role === 'ADMIN' || u.role === 'STAFF')
+      .forEach(u => map.set(u.id, u))
+    if (task?.owned_by && !map.has(task.owned_by.id)) {
+      map.set(task.owned_by.id, {
+        id: task.owned_by.id,
+        first_name: task.owned_by.first_name,
+        last_name: task.owned_by.last_name,
+        created_at: '',
+        updated_at: '',
+        deleted_at: null,
+        primary_email: '',
+        primary_phone: '',
+        is_active: true,
+        role: 'STAFF',
+        companies: []
+      })
+    }
+    if (currentUser) map.delete(currentUser.id)
+    return Array.from(map.values())
+  })()
+
+  function getMentionDisplayName (user: Pick<User, 'first_name' | 'last_name'>): string {
+    return [user.first_name, user.last_name].filter(Boolean).join(' ')
+  }
+
+  const filteredMentions = mentionQuery === null
+    ? []
+    : mentionableUsers.filter(u => {
+      return getMentionDisplayName(u).toLowerCase().startsWith(mentionQuery.toLowerCase())
+    }).slice(0, 6)
+
+  function handleCommentChange (e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const val = e.target.value
+    setCommentBody(val)
+
+    const cursor = e.target.selectionStart ?? val.length
+    const textUpToCursor = val.slice(0, cursor)
+    const atMatch = textUpToCursor.match(/@([\w ]*)$/)
+    if (atMatch) {
+      setMentionQuery(atMatch[1])
+      setMentionIndex(0)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  function handleSelectMention (user: User) {
+    const el = commentRef.current
+    if (!el) return
+
+    const cursor = el.selectionStart ?? commentBody.length
+    const textUpToCursor = commentBody.slice(0, cursor)
+    const atIndex = textUpToCursor.lastIndexOf('@')
+    const displayName = getMentionDisplayName(user)
+    const before = commentBody.slice(0, atIndex)
+    const after = commentBody.slice(cursor)
+    const newBody = `${before}@${displayName} ${after}`
+    setCommentBody(newBody)
+    setMentionQuery(null)
+    setMentionMap(prev => ({ ...prev, [displayName]: user.id }))
+
+    setTimeout(() => {
+      if (el) {
+        const newCursor = atIndex + displayName.length + 2 // @ + name + space
+        el.focus()
+        el.setSelectionRange(newCursor, newCursor)
+      }
+    }, 0)
+  }
+
+  function handleCommentKeyDown (e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionQuery !== null && filteredMentions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex(i => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        handleSelectMention(filteredMentions[mentionIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null)
+        return
+      }
+    }
+
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      handleSubmitComment()
+    }
+  }
+
+  function buildSubmitPayload (): { comment_body: string; mention_ids: string[] } {
+    let body = commentBody
+    const mention_ids: string[] = []
+    Object.entries(mentionMap).forEach(([displayName, userId]) => {
+      if (body.includes(`@${displayName}`)) {
+        body = body.replaceAll(`@${displayName}`, `@[${displayName}](${userId})`)
+        mention_ids.push(userId)
+      }
+    })
+    return { comment_body: body.trim(), mention_ids }
+  }
+
+  function renderCommentBody (body: string): React.ReactNode {
+    const parts = body.split(/(@\[[^\]]+\]\([^)]+\))/)
+    return parts.map((part, i) => {
+      const match = part.match(/^@\[([^\]]+)\]\([^)]+\)$/)
+      if (match) {
+        return (
+          <span key={i} className="font-semibold text-primary">
+            @{match[1]}
+          </span>
+        )
+      }
+      return part
+    })
   }
 
   function handleStatusChange (keys: Iterable<unknown>) {
@@ -263,6 +409,19 @@ export default function TaskDetailPage () {
     setIsEditingBody(true)
   }
 
+  async function handleAssignUser (userId: string) {
+    if (!task) return
+    setAssigningUser(true)
+    try {
+      const response = await api.updateTask(taskId, { assigned_to_id: userId })
+      if (response.data) setTask(response.data)
+    } catch (err) {
+      console.error('Failed to assign user:', err)
+    } finally {
+      setAssigningUser(false)
+    }
+  }
+
   async function handleSaveBody () {
     if (!task || editBody === task.body) {
       setIsEditingBody(false)
@@ -311,13 +470,17 @@ export default function TaskDetailPage () {
     if (!commentBody.trim()) return
     setSubmittingComment(true)
     try {
+      const { comment_body, mention_ids } = buildSubmitPayload()
       const response = await api.addTaskComment(taskId, {
-        comment_body: commentBody.trim(),
-        visibility: commentVisibility
+        comment_body,
+        visibility: commentVisibility,
+        ...(mention_ids.length > 0 ? { mention_ids } : {})
       })
       if (response.data) {
         setActivity(prev => [...prev, response.data!])
         setCommentBody('')
+        setMentionMap({})
+        setMentionQuery(null)
       }
     } catch (err) {
       console.error('Failed to add comment:', err)
@@ -495,7 +658,7 @@ export default function TaskDetailPage () {
             </div>
           </div>
 
-          {(task.owned_by ?? task.assigned_to) && (
+          {(task.owned_by ?? task.assigned_to ?? true) && (
             <div className="flex flex-wrap gap-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
               {task.owned_by && (
                 <div>
@@ -505,14 +668,32 @@ export default function TaskDetailPage () {
                   <TaskUser user={task.owned_by} />
                 </div>
               )}
-              {task.assigned_to && (
-                <div>
-                  <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                    Assigned To
-                  </h3>
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                  Assigned To
+                </h3>
+                {task.assigned_to ? (
                   <TaskUser user={task.assigned_to} />
-                </div>
-              )}
+                ) : (
+                  <Select
+                    placeholder="Assign a user..."
+                    className="w-52"
+                    size="sm"
+                    isLoading={assigningUser}
+                    isDisabled={assigningUser || users.length === 0}
+                    onSelectionChange={(keys) => {
+                      const id = Array.from(keys)[0] as string
+                      if (id) handleAssignUser(id)
+                    }}
+                  >
+                    {users.map(u => (
+                      <SelectItem key={u.id} textValue={`${u.first_name} ${u.last_name}`}>
+                        {u.first_name} {u.last_name}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                )}
+              </div>
             </div>
           )}
         </CardBody>
@@ -547,7 +728,7 @@ export default function TaskDetailPage () {
                     </span>
                   </div>
                   <div className="rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-                    {item.comment_body}
+                    {renderCommentBody(item.comment_body ?? '')}
                   </div>
                 </div>
               ) : (
@@ -574,20 +755,39 @@ export default function TaskDetailPage () {
 
         {/* Comment form */}
         <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
-          <Textarea
-            value={commentBody}
-            onValueChange={setCommentBody}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                handleSubmitComment()
-              }
-            }}
-            placeholder="Add a comment..."
-            minRows={3}
-            isDisabled={submittingComment}
-            variant="bordered"
-          />
+          <div className="relative">
+            <textarea
+              ref={commentRef}
+              value={commentBody}
+              onChange={handleCommentChange}
+              onKeyDown={handleCommentKeyDown}
+              placeholder="Add a comment... (use @ to mention someone)"
+              rows={3}
+              disabled={submittingComment}
+              className="w-full resize-none rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            />
+            {mentionQuery !== null && filteredMentions.length > 0 && (
+              <div className="absolute left-0 z-50 mt-1 w-64 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                {filteredMentions.map((user, i) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleSelectMention(user) }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                      i === mentionIndex
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-zinc-800 hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      {user.first_name[0]}{user.last_name[0]}
+                    </span>
+                    {user.first_name} {user.last_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="mt-2 flex items-center gap-2">
             <ButtonGroup size="sm" variant="bordered">
               <Button
