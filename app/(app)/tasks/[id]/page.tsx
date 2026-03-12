@@ -23,7 +23,11 @@ import {
   Dropdown,
   DropdownTrigger,
   DropdownMenu,
-  DropdownItem
+  DropdownItem,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Input
 } from '@heroui/react'
 import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility, type User } from '@/lib/api/client'
 
@@ -126,6 +130,11 @@ export default function TaskDetailPage () {
   const [commentBody, setCommentBody] = useState('')
   const [commentVisibility, setCommentVisibility] = useState<TaskActivityVisibility>('SHARED')
   const [submittingComment, setSubmittingComment] = useState(false)
+
+  // Link insertion
+  const [linkPopoverOpen, setLinkPopoverOpen] = useState(false)
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkLabel, setLinkLabel] = useState('')
 
   // Mention picker
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
@@ -311,22 +320,56 @@ export default function TaskDetailPage () {
         mention_ids.push(userId)
       }
     })
+    // Auto-linkify bare URLs not already inside a markdown link [text](url)
+    body = body.replace(/(?<!\]\()https?:\/\/[^\s)]+/g, (url) => `[${url}](${url})`)
     return { comment_body: body.trim(), mention_ids }
   }
 
   function renderCommentBody (body: string): React.ReactNode {
-    const parts = body.split(/(@\[[^\]]+\]\([^)]+\))/)
-    return parts.map((part, i) => {
-      const match = part.match(/^@\[([^\]]+)\]\([^)]+\)$/)
-      if (match) {
-        return (
-          <span key={i} className="font-semibold text-primary">
-            @{match[1]}
-          </span>
-        )
-      }
-      return part
-    })
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <span className="block">{children}</span>,
+          a: ({ href, children }) => {
+            // Mention tokens: @[Name](uuid) — remark parses as link with UUID href
+            if (href && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(href)) {
+              return <span className="font-semibold text-primary">@{children}</span>
+            }
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:opacity-80">
+                {children}
+              </a>
+            )
+          }
+        }}
+      >
+        {body}
+      </ReactMarkdown>
+    )
+  }
+
+  function handleInsertLink () {
+    const el = commentRef.current
+    if (!el) return
+    const label = linkLabel.trim() || linkUrl
+    const url = linkUrl.trim()
+    if (!url) return
+
+    const cursor = el.selectionStart ?? commentBody.length
+    const before = commentBody.slice(0, cursor)
+    const after = commentBody.slice(cursor)
+    const markdown = `[${label}](${url})`
+    setCommentBody(`${before}${markdown}${after}`)
+    setLinkUrl('')
+    setLinkLabel('')
+    setLinkPopoverOpen(false)
+
+    setTimeout(() => {
+      el.focus()
+      const newCursor = cursor + markdown.length
+      el.setSelectionRange(newCursor, newCursor)
+    }, 0)
   }
 
   function handleStatusChange (keys: Iterable<unknown>) {
@@ -805,6 +848,40 @@ export default function TaskDetailPage () {
                 Internal only
               </Button>
             </ButtonGroup>
+            <Popover
+              isOpen={linkPopoverOpen}
+              onOpenChange={setLinkPopoverOpen}
+              placement="top-start"
+            >
+              <PopoverTrigger>
+                <Button size="sm" variant="bordered" aria-label="Insert link">
+                  🔗 Link
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-3">
+                <div className="flex flex-col gap-2">
+                  <Input
+                    size="sm"
+                    label="URL"
+                    placeholder="https://..."
+                    value={linkUrl}
+                    onValueChange={setLinkUrl}
+                    autoFocus
+                  />
+                  <Input
+                    size="sm"
+                    label="Label (optional)"
+                    placeholder="Link text"
+                    value={linkLabel}
+                    onValueChange={setLinkLabel}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInsertLink() }}
+                  />
+                  <Button size="sm" color="primary" onPress={handleInsertLink} isDisabled={!linkUrl.trim()}>
+                    Insert
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button
               size="sm"
               color="primary"
