@@ -5,6 +5,7 @@ export type ElementType =
   | 'text'
   | 'curved_text'
   | 'icon_placeholder'
+  | 'group'
 
 export interface CanvasSettings {
   width: number
@@ -86,6 +87,11 @@ export interface IconPlaceholderElement extends BaseElement {
   iconColor?: string       // Color applied to the SVG (replaces currentColor)
 }
 
+export interface GroupElement extends BaseElement {
+  type: 'group'
+  children: EditorElement[]  // positions are relative to the group's x,y
+}
+
 export type EditorElement =
   | RectElement
   | CircleElement
@@ -93,6 +99,7 @@ export type EditorElement =
   | TextElement
   | CurvedTextElement
   | IconPlaceholderElement
+  | GroupElement
 
 export interface TemplateDocument {
   version: number

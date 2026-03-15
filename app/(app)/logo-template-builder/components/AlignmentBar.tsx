@@ -18,6 +18,8 @@ function getAlignedX (el: EditorElement, canvasWidth: number): number {
       const midX = (pts[0] + pts[2]) / 2
       return canvasWidth / 2 - midX
     }
+    case 'group':
+      return el.x
     default:
       return (el as EditorElement).x
   }
@@ -38,6 +40,8 @@ function getAlignedY (el: EditorElement, canvasHeight: number): number {
       const midY = (pts[1] + pts[3]) / 2
       return canvasHeight / 2 - midY
     }
+    case 'group':
+      return el.y
     default:
       return (el as EditorElement).y
   }

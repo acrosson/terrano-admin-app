@@ -5,7 +5,7 @@ import { Stage, Layer, Rect, Circle, Line, Text, Group, Shape, Transformer, Imag
 import type Konva from 'konva'
 import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@heroui/react'
 import { useEditorStore } from '../store'
-import type { EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement } from '../types'
+import type { EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
 import { buildFontStyle } from '../hooks/useFonts'
 
 const PADDING = 40 // workspace padding around artboard
@@ -18,30 +18,45 @@ function resolveBuilderColor (value: string | undefined): string | undefined {
   return value.startsWith('{') ? TOKEN_PLACEHOLDER : value
 }
 
+function scaleGroupChildren (children: EditorElement[], scaleX: number, scaleY: number): EditorElement[] {
+  return children.map(c => {
+    const scaled = { ...c, x: c.x * scaleX, y: c.y * scaleY } as Record<string, unknown>
+    if (c.type === 'rect' || c.type === 'icon_placeholder') {
+      scaled.width = Math.max(5, (c as RectElement).width * scaleX)
+      scaled.height = Math.max(5, (c as RectElement).height * scaleY)
+    } else if (c.type === 'circle') {
+      scaled.radius = Math.max(5, (c as CircleElement).radius * Math.min(scaleX, scaleY))
+    } else if (c.type === 'text') {
+      scaled.width = Math.max(20, (c as TextElement).width * scaleX)
+    } else if (c.type === 'curved_text') {
+      scaled.radius = Math.max(10, (c as CurvedTextElement).radius * Math.min(scaleX, scaleY))
+    } else if (c.type === 'line') {
+      const pts = (c as LineElement).points
+      scaled.points = [pts[0] * scaleX, pts[1] * scaleY, pts[2] * scaleX, pts[3] * scaleY]
+    }
+    return scaled as unknown as EditorElement
+  })
+}
+
 export function CanvasArea () {
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const transformerRef = useRef<Konva.Transformer>(null)
   const nodeRefs = useRef<Map<string, Konva.Node>>(new Map())
 
-  const { document: doc, selectedElementId, setSelectedElementId, updateElement, deleteElement, duplicateElement, reorderElement } = useEditorStore()
+  const { document: doc, selectedElementIds, setSelectedElementId, setSelectedElementIds, updateElement, deleteElement, duplicateElement, reorderElement, groupElements, ungroupElement } = useEditorStore()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
 
-  // Attach transformer to selected node
+  // Attach transformer to all selected nodes
   useEffect(() => {
     const tr = transformerRef.current
     if (!tr) return
-    if (selectedElementId) {
-      const node = nodeRefs.current.get(selectedElementId)
-      if (node) {
-        tr.nodes([node])
-        tr.getLayer()?.batchDraw()
-      }
-    } else {
-      tr.nodes([])
-      tr.getLayer()?.batchDraw()
-    }
-  }, [selectedElementId, doc.elements])
+    const nodes = selectedElementIds
+      .map(id => nodeRefs.current.get(id))
+      .filter((n): n is Konva.Node => !!n)
+    tr.nodes(nodes)
+    tr.getLayer()?.batchDraw()
+  }, [selectedElementIds, doc.elements])
 
   const stageWidth = doc.canvas.width + PADDING * 2
   const stageHeight = doc.canvas.height + PADDING * 2
@@ -91,6 +106,9 @@ export function CanvasArea () {
     } else if (el.type === 'line') {
       const pts = (el as LineElement).points
       ;(patch as Record<string, unknown>).points = [pts[0], pts[1], pts[2] * scaleX, pts[3] * scaleY]
+    } else if (el.type === 'group') {
+      // Distribute scale into children
+      ;(patch as Record<string, unknown>).children = scaleGroupChildren((el as GroupElement).children, scaleX, scaleY)
     }
 
     updateElement(id, patch as Partial<EditorElement>)
@@ -106,13 +124,23 @@ export function CanvasArea () {
 
   function handleSelect (id: string, e: Konva.KonvaEventObject<MouseEvent>) {
     e.cancelBubble = true
-    setSelectedElementId(id)
+    if (e.evt.shiftKey) {
+      const ids = selectedElementIds.includes(id)
+        ? selectedElementIds.filter(i => i !== id)
+        : [...selectedElementIds, id]
+      setSelectedElementIds(ids)
+    } else {
+      setSelectedElementId(id)
+    }
   }
 
   function handleContextMenu (id: string, e: Konva.KonvaEventObject<PointerEvent>) {
     e.evt.preventDefault()
     e.cancelBubble = true
-    setSelectedElementId(id)
+    // Keep multi-selection if right-clicking an already-selected element
+    if (!selectedElementIds.includes(id)) {
+      setSelectedElementId(id)
+    }
     setContextMenu({ x: e.evt.clientX, y: e.evt.clientY, elementId: id })
   }
 
@@ -129,12 +157,15 @@ export function CanvasArea () {
       case 'bring-forward': if (idx < doc.elements.length - 1) reorderElement(elementId, 'forward'); break
       case 'send-back': if (idx > 0) reorderElement(elementId, 'backward'); break
       case 'delete': deleteElement(elementId); break
+      case 'group': groupElements(selectedElementIds); break
+      case 'ungroup': ungroupElement(elementId); break
     }
     setContextMenu(null)
   }
 
   const contextEl = contextMenu ? doc.elements.find(e => e.id === contextMenu.elementId) : null
   const contextIdx = contextEl ? doc.elements.indexOf(contextEl) : -1
+  const canGroup = selectedElementIds.length >= 2
 
   return (
     <div
@@ -170,7 +201,7 @@ export function CanvasArea () {
               el={el}
               artboardX={artboardX}
               artboardY={artboardY}
-              isSelected={el.id === selectedElementId}
+              isSelected={selectedElementIds.includes(el.id)}
               onSelect={(e) => handleSelect(el.id, e)}
               onContextMenu={(e) => handleContextMenu(el.id, e)}
               onDragEnd={(e) => handleDragEnd(el.id, e)}
@@ -178,6 +209,20 @@ export function CanvasArea () {
               setRef={(node) => setNodeRef(el.id, node)}
             />
           ))}
+
+          {/* Per-element selection highlights (multi-select only) */}
+          {selectedElementIds.length > 1 && selectedElementIds.map(id => {
+            const el = doc.elements.find(e => e.id === id)
+            if (!el || el.type === 'group') return null
+            return (
+              <SelectionHighlight
+                key={`sh-${id}`}
+                el={el}
+                artboardX={artboardX}
+                artboardY={artboardY}
+              />
+            )
+          })}
 
           <Transformer
             ref={transformerRef}
@@ -209,6 +254,8 @@ export function CanvasArea () {
             <DropdownItem key="duplicate">Duplicate</DropdownItem>
             <DropdownItem key="bring-forward" isDisabled={contextIdx === doc.elements.length - 1}>Bring Forward</DropdownItem>
             <DropdownItem key="send-back" isDisabled={contextIdx === 0}>Send Back</DropdownItem>
+            {canGroup ? <DropdownItem key="group">Group</DropdownItem> : null}
+            {contextEl?.type === 'group' ? <DropdownItem key="ungroup">Ungroup</DropdownItem> : null}
             <DropdownItem key="delete" color="danger" className="text-danger">Delete</DropdownItem>
           </DropdownMenu>
         </Dropdown>
@@ -317,6 +364,60 @@ function ElementNode ({ el, artboardX, artboardY, isSelected, onSelect, onContex
     )
   }
 
+  if (el.type === 'group') {
+    return (
+      <Group
+        ref={(n) => setRef(n as Konva.Node | null)}
+        {...commonProps}
+      >
+        {(el as GroupElement).children.map(child => (
+          <ElementNode
+            key={child.id}
+            el={{ ...child, draggable: false }}
+            artboardX={0}
+            artboardY={0}
+            isSelected={false}
+            onSelect={onSelect}
+            onContextMenu={onContextMenu}
+            onDragEnd={() => {}}
+            onTransformEnd={() => {}}
+            setRef={() => {}}
+          />
+        ))}
+      </Group>
+    )
+  }
+
+  return null
+}
+
+function SelectionHighlight ({ el, artboardX, artboardY }: {
+  el: EditorElement
+  artboardX: number
+  artboardY: number
+}) {
+  const x = artboardX + el.x
+  const y = artboardY + el.y
+  const style = { stroke: '#006FEE', strokeWidth: 1.5, dash: [4, 3], listening: false, perfectDrawEnabled: false }
+
+  if (el.type === 'rect' || el.type === 'icon_placeholder') {
+    const e = el as RectElement
+    return <Rect x={x} y={y} width={e.width} height={e.height} rotation={el.rotation} {...style} />
+  }
+  if (el.type === 'circle') {
+    return <Circle x={x} y={y} radius={(el as CircleElement).radius} rotation={el.rotation} {...style} />
+  }
+  if (el.type === 'text') {
+    const e = el as TextElement
+    return <Rect x={x} y={y} width={e.width} height={e.fontSize * 1.25} rotation={el.rotation} {...style} />
+  }
+  if (el.type === 'curved_text') {
+    const r = (el as CurvedTextElement).radius + (el as CurvedTextElement).fontSize
+    return <Rect x={x - r} y={y - r} width={r * 2} height={r * 2} rotation={el.rotation} {...style} />
+  }
+  if (el.type === 'line') {
+    return <Line x={x} y={y} points={(el as LineElement).points} {...style} />
+  }
   return null
 }
 

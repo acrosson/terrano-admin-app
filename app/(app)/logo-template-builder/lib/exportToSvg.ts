@@ -1,4 +1,4 @@
-import type { TemplateDocument, EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement } from '../types'
+import type { TemplateDocument, EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
 import type { SampleIcon } from '../data/sampleIcons'
 
 function escapeXml (s: string): string {
@@ -94,6 +94,12 @@ function renderElement (el: EditorElement, icons: SampleIcon[], iconVars: Record
       const iconId = el.bind ? iconVars[`${el.bind}.id`] : undefined
       const iconUrl = el.bind ? iconVars[`${el.bind}.url`] : undefined
       return renderIconPlaceholder(el, icons, iconId, iconUrl)
+    }
+    case 'group': {
+      const group = el as GroupElement
+      const rotate = group.rotation !== 0 ? ` rotate(${group.rotation}, 0, 0)` : ''
+      const children = group.children.map(child => renderElement(child, icons, iconVars)).join('\n    ')
+      return `<g transform="translate(${group.x}, ${group.y})${rotate}">\n    ${children}\n  </g>`
     }
     default: return ''
   }

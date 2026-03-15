@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
-import type { TemplateDocument, EditorElement } from './types'
+import type { TemplateDocument, EditorElement, GroupElement } from './types'
 import type { PreviewVariables } from './previewTypes'
 import { DEFAULT_PREVIEW_VARIABLES } from './previewTypes'
 
@@ -16,6 +16,7 @@ const DEFAULT_DOCUMENT: TemplateDocument = {
 interface EditorState {
   document: TemplateDocument
   selectedElementId: string | null
+  selectedElementIds: string[]
   mode: 'builder' | 'preview'
   previewVariables: PreviewVariables
   // Actions
@@ -25,6 +26,9 @@ interface EditorState {
   duplicateElement: (id: string) => void
   reorderElement: (id: string, direction: 'forward' | 'backward') => void
   setSelectedElementId: (id: string | null) => void
+  setSelectedElementIds: (ids: string[]) => void
+  groupElements: (ids: string[]) => void
+  ungroupElement: (id: string) => void
   replaceDocument: (doc: TemplateDocument) => void
   updateCanvas: (patch: Partial<TemplateDocument['canvas']>) => void
   setMode: (mode: 'builder' | 'preview') => void
@@ -34,6 +38,7 @@ interface EditorState {
 export const useEditorStore = create<EditorState>((set, get) => ({
   document: DEFAULT_DOCUMENT,
   selectedElementId: null,
+  selectedElementIds: [],
   mode: 'builder',
   previewVariables: DEFAULT_PREVIEW_VARIABLES,
 
@@ -58,7 +63,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   deleteElement: (id) => {
     set(s => ({
       document: { ...s.document, elements: s.document.elements.filter(el => el.id !== id) },
-      selectedElementId: s.selectedElementId === id ? null : s.selectedElementId
+      selectedElementId: s.selectedElementId === id ? null : s.selectedElementId,
+      selectedElementIds: s.selectedElementIds.filter(i => i !== id)
     }))
   },
 
@@ -66,10 +72,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const el = get().document.elements.find(e => e.id === id)
     if (!el) return
     const newId = nanoid()
-    const dup = { ...el, id: newId, x: el.x + 20, y: el.y + 20 }
+    const dupBase = { ...el, id: newId, x: el.x + 20, y: el.y + 20 }
+    // Re-assign child IDs if duplicating a group
+    const dup = el.type === 'group'
+      ? { ...dupBase, children: (el as GroupElement).children.map(c => ({ ...c, id: nanoid() })) }
+      : dupBase
     set(s => ({
-      document: { ...s.document, elements: [...s.document.elements, dup] },
-      selectedElementId: newId
+      document: { ...s.document, elements: [...s.document.elements, dup as EditorElement] },
+      selectedElementId: newId,
+      selectedElementIds: [newId]
     }))
   },
 
@@ -87,15 +98,54 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     })
   },
 
-  setSelectedElementId: (id) => set({ selectedElementId: id }),
+  setSelectedElementId: (id) => set({ selectedElementId: id, selectedElementIds: id ? [id] : [] }),
 
-  replaceDocument: (doc) => set({ document: doc, selectedElementId: null }),
+  setSelectedElementIds: (ids) => set({ selectedElementIds: ids, selectedElementId: ids[ids.length - 1] ?? null }),
+
+  groupElements: (ids) => {
+    const { document: doc } = get()
+    const elements = ids.map(id => doc.elements.find(e => e.id === id)).filter(Boolean) as EditorElement[]
+    if (elements.length < 2) return
+
+    const idSet = new Set(ids)
+    const minX = Math.min(...elements.map(e => e.x))
+    const minY = Math.min(...elements.map(e => e.y))
+
+    const children = elements.map(e => ({ ...e, x: e.x - minX, y: e.y - minY }))
+    const groupId = nanoid()
+    const group: GroupElement = { id: groupId, type: 'group', x: minX, y: minY, rotation: 0, draggable: true, children }
+
+    // Insert group at the position of the topmost selected element
+    const maxIdx = Math.max(...elements.map(e => doc.elements.findIndex(el => el.id === e.id)))
+    const remaining = doc.elements.filter(e => !idSet.has(e.id))
+    const insertAt = doc.elements.slice(0, maxIdx + 1).filter(e => !idSet.has(e.id)).length
+    const newElements = [...remaining.slice(0, insertAt), group, ...remaining.slice(insertAt)]
+
+    set({ document: { ...doc, elements: newElements }, selectedElementId: groupId, selectedElementIds: [groupId] })
+  },
+
+  ungroupElement: (id) => {
+    const { document: doc } = get()
+    const el = doc.elements.find(e => e.id === id)
+    if (!el || el.type !== 'group') return
+    const group = el as GroupElement
+    const children = group.children.map(c => ({ ...c, x: c.x + group.x, y: c.y + group.y }))
+    const idx = doc.elements.findIndex(e => e.id === id)
+    const newElements = [...doc.elements.slice(0, idx), ...children, ...doc.elements.slice(idx + 1)]
+    set({
+      document: { ...doc, elements: newElements },
+      selectedElementIds: children.map(c => c.id),
+      selectedElementId: children[children.length - 1]?.id ?? null
+    })
+  },
+
+  replaceDocument: (doc) => set({ document: doc, selectedElementId: null, selectedElementIds: [] }),
 
   updateCanvas: (patch) => set(s => ({
     document: { ...s.document, canvas: { ...s.document.canvas, ...patch } }
   })),
 
-  setMode: (mode) => set({ mode, selectedElementId: null }),
+  setMode: (mode) => set({ mode, selectedElementId: null, selectedElementIds: [] }),
 
   updatePreviewVariables: (patch) => set(s => ({
     previewVariables: {

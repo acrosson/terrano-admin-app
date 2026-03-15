@@ -1,4 +1,4 @@
-import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement } from '../types'
+import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
 
 type VarsMap = Record<string, Record<string, string | undefined>>
@@ -57,6 +57,11 @@ function resolveElement (el: EditorElement, vars: PreviewVariables): EditorEleme
         ...el,
         iconColor: el.iconColor ? resolveTokens(el.iconColor, vars) : el.iconColor,
       }
+    case 'group':
+      return {
+        ...el,
+        children: (el as GroupElement).children.map(child => resolveElement(child, vars)),
+      } satisfies GroupElement
     default:
       return el
   }

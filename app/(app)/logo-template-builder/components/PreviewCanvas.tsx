@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { Stage, Layer, Rect, Circle, Line, Text, Group, Path, Shape, Image as KonvaImage } from 'react-konva'
 import type Konva from 'konva'
-import type { TemplateDocument, EditorElement, CurvedTextElement, IconPlaceholderElement } from '../types'
+import type { TemplateDocument, EditorElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
 import { buildFontStyle } from '../hooks/useFonts'
 
@@ -159,6 +159,22 @@ function PreviewElementNode ({ el, artboardX, artboardY, variables }: PreviewNod
         artboardY={artboardY}
         variables={variables}
       />
+    )
+  }
+
+  if (el.type === 'group') {
+    return (
+      <Group x={baseX} y={baseY} rotation={el.rotation} listening={false}>
+        {(el as GroupElement).children.map(child => (
+          <PreviewElementNode
+            key={child.id}
+            el={child}
+            artboardX={0}
+            artboardY={0}
+            variables={variables}
+          />
+        ))}
+      </Group>
     )
   }
 
