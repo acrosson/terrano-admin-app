@@ -1,6 +1,6 @@
 import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
-import { computeAutoLayout, getChildrenBounds } from './computeAutoLayout'
+import { computeAutoLayout, getChildrenBounds, resolveSizeBindings } from './computeAutoLayout'
 
 type VarsMap = Record<string, Record<string, string | undefined>>
 
@@ -61,7 +61,8 @@ function resolveElement (el: EditorElement, vars: PreviewVariables, canvasWidth:
     case 'group': {
       const group = el as GroupElement
       let children = group.children.map(child => resolveElement(child, vars, canvasWidth, canvasHeight))
-      // Recalculate auto-layout with resolved text (measured widths may have changed)
+      // Resolve size bindings (rects tracking text size) then recalculate auto-layout
+      children = resolveSizeBindings(children)
       if (group.layout) {
         children = computeAutoLayout(children, group.layout)
       }

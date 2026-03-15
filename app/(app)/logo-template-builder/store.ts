@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid'
 import type { TemplateDocument, EditorElement, GroupElement, AutoLayout } from './types'
 import type { PreviewVariables } from './previewTypes'
 import { DEFAULT_PREVIEW_VARIABLES } from './previewTypes'
-import { computeAutoLayout, getChildrenBounds, syncTextWidths } from './lib/computeAutoLayout'
+import { computeAutoLayout, getChildrenBounds, syncTextWidths, resolveSizeBindings } from './lib/computeAutoLayout'
 
 const ARTBOARD_W = 800
 const ARTBOARD_H = 800
@@ -39,7 +39,8 @@ function updateElementRecursive (
       if (!childIds.has(id)) return el
       // Recurse into children
       let newChildren = updateElementRecursive(group.children, id, patch, canvas)
-      // Re-run auto-layout if enabled
+      // Resolve size bindings then re-run auto-layout
+      newChildren = resolveSizeBindings(newChildren)
       if (group.layout) {
         newChildren = computeAutoLayout(newChildren, group.layout)
       } else {
@@ -207,9 +208,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const el = get().document.elements.find(e => e.id === id)
     if (!el || el.type !== 'group') return
     const group = el as GroupElement
+    const resolved = resolveSizeBindings(group.children)
     const newChildren = layout
-      ? computeAutoLayout(group.children, layout)
-      : group.children
+      ? computeAutoLayout(resolved, layout)
+      : resolved
     const updated = { ...group, layout, children: newChildren }
     // Re-center if centering is active
     const canvas = get().document.canvas

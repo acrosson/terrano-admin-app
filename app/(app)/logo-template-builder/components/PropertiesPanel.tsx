@@ -1,7 +1,7 @@
 'use client'
 
 import { useEditorStore, findElementById } from '../store'
-import type { EditorElement, CurvedTextElement, TextElement, GroupElement } from '../types'
+import type { EditorElement, CurvedTextElement, TextElement, GroupElement, RectElement, IconPlaceholderElement, SizeBind } from '../types'
 import { useFonts } from '../hooks/useFonts'
 
 export function PropertiesPanel () {
@@ -64,6 +64,7 @@ export function PropertiesPanel () {
             <Field label="Fill"><ColorBindInput value={el.fill} onChange={v => patch({ fill: v })} /></Field>
             <Field label="Stroke"><ColorBindInput value={el.stroke ?? '#000000'} onChange={v => patch({ stroke: v })} /></Field>
             <Field label="Stroke Width"><NumberInput value={el.strokeWidth ?? 0} onChange={v => patch({ strokeWidth: v })} /></Field>
+            <SizeBindSection el={el} siblings={getSiblings(doc.elements, el.id)} patch={patch} />
           </>
         )}
 
@@ -205,6 +206,7 @@ export function PropertiesPanel () {
             </Field>
             <p className="text-xs text-zinc-400">Pick an icon in Preview mode</p>
             <Field label="Icon Color"><ColorBindInput value={el.iconColor ?? '#000000'} onChange={v => patch({ iconColor: v })} /></Field>
+            <SizeBindSection el={el} siblings={getSiblings(doc.elements, el.id)} patch={patch} />
           </>
         )}
 
@@ -229,7 +231,7 @@ export function PropertiesPanel () {
                 <>
                   <Field label="Direction">
                     <div className="flex gap-1">
-                      {(['horizontal', 'vertical'] as const).map(d => (
+                      {(['horizontal', 'vertical', 'stack'] as const).map(d => (
                         <button
                           key={d}
                           onClick={() => setGroupLayout(el.id, { ...layout, direction: d })}
@@ -240,9 +242,11 @@ export function PropertiesPanel () {
                       ))}
                     </div>
                   </Field>
-                  <Field label="Gap">
-                    <NumberInput value={layout.gap} onChange={v => setGroupLayout(el.id, { ...layout, gap: v })} />
-                  </Field>
+                  {layout.direction !== 'stack' && (
+                    <Field label="Gap">
+                      <NumberInput value={layout.gap} onChange={v => setGroupLayout(el.id, { ...layout, gap: v })} />
+                    </Field>
+                  )}
                   <Field label="Align">
                     <div className="flex gap-1">
                       {(['start', 'center', 'end'] as const).map(a => (
@@ -461,6 +465,104 @@ function ColorBindInput ({ value, onChange }: { value: string; onChange: (v: str
         </div>
       )}
     </div>
+  )
+}
+
+/** Find sibling elements of a given element (other children of the same parent group). */
+function getSiblings (elements: EditorElement[], id: string): EditorElement[] {
+  for (const el of elements) {
+    if (el.type === 'group') {
+      const group = el as GroupElement
+      if (group.children.some(c => c.id === id)) {
+        return group.children.filter(c => c.id !== id)
+      }
+      const nested = getSiblings(group.children, id)
+      if (nested.length > 0) return nested
+    }
+  }
+  return []
+}
+
+function getElementLabel (el: EditorElement): string {
+  if (el.name) return el.name
+  if (el.type === 'text') return `"${(el as TextElement).text.slice(0, 16)}"`
+  if (el.type === 'curved_text') return `"${(el as CurvedTextElement).text.slice(0, 16)}"`
+  return el.type.replace('_', ' ')
+}
+
+function SizeBindSection ({ el, siblings, patch }: {
+  el: RectElement | IconPlaceholderElement
+  siblings: EditorElement[]
+  patch: (p: Partial<EditorElement>) => void
+}) {
+  const sizeBind = el.sizeBind
+
+  function updateSizeBind (sb: SizeBind | undefined) {
+    patch({ sizeBind: sb } as Partial<EditorElement>)
+  }
+
+  return (
+    <>
+      <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
+      <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Size Binding</span>
+      <Field label="Match size of">
+        <select
+          value={sizeBind?.targetId ?? ''}
+          onChange={e => {
+            const targetId = e.target.value
+            if (!targetId) {
+              updateSizeBind(undefined)
+            } else {
+              updateSizeBind({
+                targetId,
+                axis: sizeBind?.axis ?? 'width',
+                paddingX: sizeBind?.paddingX ?? 16,
+                paddingY: sizeBind?.paddingY ?? 8,
+              })
+            }
+          }}
+          className="w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none dark:border-zinc-600 dark:text-zinc-100"
+        >
+          <option value="">— none —</option>
+          {siblings.map(s => (
+            <option key={s.id} value={s.id}>
+              {getElementLabel(s)} ({s.id.slice(0, 6)})
+            </option>
+          ))}
+        </select>
+      </Field>
+      {sizeBind && (
+        <>
+          <Field label="Axis">
+            <div className="flex gap-1">
+              {(['width', 'height', 'both'] as const).map(a => (
+                <button
+                  key={a}
+                  onClick={() => updateSizeBind({ ...sizeBind, axis: a })}
+                  className={`flex-1 rounded py-1 text-xs capitalize ${sizeBind.axis === a ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Padding X">
+              <NumberInput
+                value={sizeBind.paddingX ?? 0}
+                onChange={v => updateSizeBind({ ...sizeBind, paddingX: v })}
+              />
+            </Field>
+            <Field label="Padding Y">
+              <NumberInput
+                value={sizeBind.paddingY ?? 0}
+                onChange={v => updateSizeBind({ ...sizeBind, paddingY: v })}
+              />
+            </Field>
+          </div>
+        </>
+      )}
+    </>
   )
 }
 

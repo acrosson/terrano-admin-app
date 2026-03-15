@@ -1,4 +1,4 @@
-import type { EditorElement, AutoLayout, RectElement, CircleElement, TextElement, CurvedTextElement, LineElement, GroupElement } from '../types'
+import type { EditorElement, AutoLayout, RectElement, CircleElement, TextElement, CurvedTextElement, LineElement, GroupElement, SizeBind } from '../types'
 
 // Shared offscreen canvas for text measurement
 let _measureCtx: CanvasRenderingContext2D | null = null
@@ -101,6 +101,38 @@ export function syncTextWidths (children: EditorElement[]): EditorElement[] {
   })
 }
 
+/** Resolve size bindings: elements with sizeBind get their width/height
+ *  set to match a sibling element's measured bounds + padding.
+ *  Must run after text widths are measured / synced. */
+export function resolveSizeBindings (children: EditorElement[]): EditorElement[] {
+  // Build a lookup of element bounds by id
+  const boundsById = new Map<string, { width: number; height: number }>()
+  for (const child of children) {
+    boundsById.set(child.id, getElementBounds(child))
+  }
+
+  return children.map(child => {
+    const sizeBind = (child as unknown as Record<string, unknown>).sizeBind as SizeBind | undefined
+    if (!sizeBind) return child
+
+    const target = boundsById.get(sizeBind.targetId)
+    if (!target) return child
+
+    const px = sizeBind.paddingX ?? 0
+    const py = sizeBind.paddingY ?? 0
+    const patched = { ...child } as unknown as Record<string, unknown>
+
+    if (sizeBind.axis === 'width' || sizeBind.axis === 'both') {
+      patched.width = target.width + px * 2
+    }
+    if (sizeBind.axis === 'height' || sizeBind.axis === 'both') {
+      patched.height = target.height + py * 2
+    }
+
+    return patched as unknown as EditorElement
+  })
+}
+
 export function computeAutoLayout (children: EditorElement[], layout: AutoLayout): EditorElement[] {
   if (children.length === 0) return []
 
@@ -108,6 +140,34 @@ export function computeAutoLayout (children: EditorElement[], layout: AutoLayout
   const bounds = children.map(c => getElementBounds(c))
   const offsets = children.map(c => getOriginOffset(c))
 
+  // Stack layout: all children overlap, aligned on both axes
+  if (direction === 'stack') {
+    const maxW = Math.max(...bounds.map(b => b.width))
+    const maxH = Math.max(...bounds.map(b => b.height))
+
+    return children.map((child, i) => {
+      const { width, height } = bounds[i]
+      const { dx, dy } = offsets[i]
+
+      let x: number
+      if (align === 'start') x = padding + dx
+      else if (align === 'end') x = padding + (maxW - width) + dx
+      else x = padding + (maxW - width) / 2 + dx
+
+      let y: number
+      if (align === 'start') y = padding + dy
+      else if (align === 'end') y = padding + (maxH - height) + dy
+      else y = padding + (maxH - height) / 2 + dy
+
+      const positioned = { ...child, x, y }
+      if (child.type === 'text') {
+        ;(positioned as Record<string, unknown>).width = bounds[i].width
+      }
+      return positioned as EditorElement
+    })
+  }
+
+  // Horizontal / vertical layout
   const isHorizontal = direction === 'horizontal'
   const crossSizes = isHorizontal ? bounds.map(b => b.height) : bounds.map(b => b.width)
   const maxCross = Math.max(...crossSizes)

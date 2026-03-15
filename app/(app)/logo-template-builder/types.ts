@@ -30,6 +30,7 @@ export interface RectElement extends BaseElement {
   fill: string
   stroke?: string
   strokeWidth?: number
+  sizeBind?: SizeBind
 }
 
 export interface CircleElement extends BaseElement {
@@ -85,9 +86,17 @@ export interface IconPlaceholderElement extends BaseElement {
   iconId?: string          // API icon ID (from design icons endpoint)
   iconPreviewUrl?: string  // URL for canvas/preview rendering
   iconColor?: string       // Color applied to the SVG (replaces currentColor)
+  sizeBind?: SizeBind
 }
 
-export type AutoLayoutDirection = 'horizontal' | 'vertical'
+export interface SizeBind {
+  targetId: string         // sibling element whose measured bounds to follow
+  axis: 'width' | 'height' | 'both'
+  paddingX?: number        // extra px added to each side horizontally
+  paddingY?: number        // extra px added to each side vertically
+}
+
+export type AutoLayoutDirection = 'horizontal' | 'vertical' | 'stack'
 export type AutoLayoutAlign = 'start' | 'center' | 'end'
 
 export interface AutoLayout {

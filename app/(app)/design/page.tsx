@@ -14,6 +14,11 @@ const sections = [
     title: 'Design Requests',
     description: 'View all design requests and preview generated logo projects.',
   },
+  {
+    href: '/design/palettes',
+    title: 'Color Palettes',
+    description: 'Manage color palettes used in logo generation.',
+  },
 ]
 
 export default function DesignPage () {

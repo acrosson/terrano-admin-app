@@ -31,8 +31,8 @@ import { addToast } from '@heroui/toast'
 import { api } from '@/lib/api/client'
 import type { DesignTemplate } from '@/lib/api/client'
 
-const DESIGN_TYPES = ['logo']
-const CATEGORIES = ['wordmark', 'lettermark', 'emblem', 'combination', 'mascot', 'abstract']
+const DESIGN_TYPES = ['LOGO']
+const CATEGORIES = ['WORDMARK', 'ICON_WORDMARK', 'EMBLEM', 'BADGE', 'MONOGRAM', 'ABSTRACT_MARK']
 
 function slugify (name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -46,8 +46,8 @@ export default function DesignTemplatesPage () {
 
   // New template form state
   const [name, setName] = useState('')
-  const [designType, setDesignType] = useState('logo')
-  const [category, setCategory] = useState('wordmark')
+  const [designType, setDesignType] = useState('LOGO')
+  const [category, setCategory] = useState('WORDMARK')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -133,8 +133,8 @@ export default function DesignTemplatesPage () {
                 onClick={() => handleRowClick(template)}
               >
                 <TableCell className="font-medium">{template.name}</TableCell>
-                <TableCell className="capitalize">{template.design_type}</TableCell>
-                <TableCell className="capitalize">{template.category}</TableCell>
+                <TableCell>{template.design_type.toLowerCase()}</TableCell>
+                <TableCell>{template.category.replace(/_/g, ' ').toLowerCase()}</TableCell>
                 <TableCell>
                   <Chip
                     size="sm"
@@ -188,7 +188,7 @@ export default function DesignTemplatesPage () {
               }}
             >
               {DESIGN_TYPES.map(t => (
-                <SelectItem key={t} className="capitalize">{t}</SelectItem>
+                <SelectItem key={t}>{t.toLowerCase()}</SelectItem>
               ))}
             </Select>
             <Select
@@ -200,7 +200,7 @@ export default function DesignTemplatesPage () {
               }}
             >
               {CATEGORIES.map(c => (
-                <SelectItem key={c} className="capitalize">{c}</SelectItem>
+                <SelectItem key={c}>{c.replace(/_/g, ' ').toLowerCase()}</SelectItem>
               ))}
             </Select>
             {createError && (

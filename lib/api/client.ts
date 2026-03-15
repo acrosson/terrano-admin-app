@@ -146,6 +146,21 @@ export interface DesignTemplate {
   pages: DesignTemplatePage[]
 }
 
+export interface ColorPalette {
+  id: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  name: string
+  slug: string
+  background: string
+  primary: string
+  secondary: string
+  color_tags: string[]
+  mood_tags: string[]
+  is_active: boolean
+}
+
 export interface DesignIconsResponse {
   data: DesignIcon[] | null
   errors: string[] | null
@@ -441,5 +456,49 @@ export const api = {
 
   async getDesignRequestProjects (requestId: string): Promise<ApiResponse<DesignProject[]>> {
     return fetchApi<DesignProject[]>(`/v1/admin/design/requests/${requestId}/projects`, { method: 'GET' })
-  }
+  },
+
+  async getColorPalettes (): Promise<ApiResponse<ColorPalette[]>> {
+    return fetchApi<ColorPalette[]>('/v1/admin/design/color-palettes', { method: 'GET' })
+  },
+
+  async getColorPalette (id: string): Promise<ApiResponse<ColorPalette>> {
+    return fetchApi<ColorPalette>(`/v1/admin/design/color-palettes/${id}`, { method: 'GET' })
+  },
+
+  async createColorPalette (payload: {
+    name: string
+    slug: string
+    background: string
+    primary: string
+    secondary: string
+    color_tags: string[]
+    mood_tags: string[]
+    is_active: boolean
+  }): Promise<ApiResponse<ColorPalette>> {
+    return fetchApi<ColorPalette>('/v1/admin/design/color-palettes', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async updateColorPalette (id: string, payload: Partial<{
+    name: string
+    slug: string
+    background: string
+    primary: string
+    secondary: string
+    color_tags: string[]
+    mood_tags: string[]
+    is_active: boolean
+  }>): Promise<ApiResponse<ColorPalette>> {
+    return fetchApi<ColorPalette>(`/v1/admin/design/color-palettes/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async deleteColorPalette (id: string): Promise<ApiResponse<null>> {
+    return fetchApi<null>(`/v1/admin/design/color-palettes/${id}`, { method: 'DELETE' })
+  },
 }
