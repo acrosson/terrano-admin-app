@@ -95,6 +95,114 @@ export interface TaskActivity {
   created_at: string
 }
 
+export interface DesignIcon {
+  id: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  name: string
+  slug: string
+  source: string
+  category: string | null
+  style: string | null
+  tags: string[]
+  preview_s3_key: string  // e.g. "dev/design/icons/tabler-canary-outline.svg"
+  is_active: boolean
+}
+
+const ICON_S3_BASE = 'https://terrano-ai.s3.us-east-1.amazonaws.com'
+
+/** Build the full image URL from a DesignIcon's S3 key */
+export function designIconUrl (icon: DesignIcon): string {
+  return `${ICON_S3_BASE}/${icon.preview_s3_key}`
+}
+
+export interface DesignTemplatePage {
+  id: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  design_template_id: string
+  page_index: number
+  page_role: string
+  version: number
+  is_current: boolean
+  page_json: Record<string, unknown>
+}
+
+export interface DesignTemplate {
+  id: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  name: string
+  slug: string
+  design_type: string
+  category: string
+  thumbnail_url: string | null
+  is_active: boolean
+  style_tags: string[]
+  current_template_page_id: string | null
+  pages: DesignTemplatePage[]
+}
+
+export interface DesignIconsResponse {
+  data: DesignIcon[] | null
+  errors: string[] | null
+  meta?: {
+    total?: number
+    page?: number
+    per_page?: number
+    total_pages?: number
+  }
+}
+
+export type DesignRequestStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+
+export interface DesignRequest {
+  id: string
+  created_at: string
+  updated_at: string
+  task_id: string
+  design_type: string
+  status: DesignRequestStatus
+  input_data: {
+    business_name?: string
+    business_context_raw?: string
+    scope_answers?: Record<string, string>
+  }
+  selected_project_id: string | null
+}
+
+export interface DesignProject {
+  id: string
+  created_at: string
+  updated_at: string
+  design_request_id: string
+  design_template_id: string
+  design_type: string
+  title: string
+  status: string
+  variables: Record<string, string>
+  pages: DesignTemplatePage[]
+}
+
+export interface DesignFont {
+  id: string
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  family: string
+  slug: string
+  source: string
+  category: string
+  weights: number[]
+  styles: string[]
+  google_font_family: string
+  google_font_css_url: string
+  is_active: boolean
+}
+
 async function fetchApi<T> (
   endpoint: string,
   options: RequestInit = {}
@@ -219,5 +327,119 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload)
     })
+  },
+
+  async getDesignIcons (params: {
+    tag?: string
+    style?: string
+    is_active?: boolean
+    page?: number
+    per_page?: number
+  } = {}): Promise<DesignIconsResponse> {
+    const q = new URLSearchParams()
+    if (params.tag) q.set('tag', params.tag)
+    if (params.style) q.set('style', params.style)
+    if (params.is_active != null) q.set('is_active', String(params.is_active))
+    if (params.page != null) q.set('page', String(params.page))
+    if (params.per_page != null) q.set('per_page', String(params.per_page))
+    const qs = q.toString()
+    return fetchApi<DesignIconsResponse>(`/v1/design/icons${qs ? `?${qs}` : ''}`) as unknown as DesignIconsResponse
+  },
+
+  async getDesignIcon (id: string): Promise<ApiResponse<DesignIcon>> {
+    return fetchApi<DesignIcon>(`/v1/design/icons/${id}`, { method: 'GET' })
+  },
+
+  async getDesignTemplates (): Promise<ApiResponse<DesignTemplate[]>> {
+    return fetchApi<DesignTemplate[]>('/v1/admin/design/templates', { method: 'GET' })
+  },
+
+  async getDesignTemplate (id: string): Promise<ApiResponse<DesignTemplate>> {
+    return fetchApi<DesignTemplate>(`/v1/admin/design/templates/${id}`, { method: 'GET' })
+  },
+
+  async createDesignTemplate (payload: {
+    name: string
+    slug: string
+    design_type: string
+    category: string
+  }): Promise<ApiResponse<DesignTemplate>> {
+    return fetchApi<DesignTemplate>('/v1/admin/design/templates', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async createDesignTemplatePage (
+    templateId: string,
+    payload: {
+      page_index: number
+      page_role: string
+      version: number
+      is_current: boolean
+      page_json: Record<string, unknown>
+    }
+  ): Promise<ApiResponse<DesignTemplatePage>> {
+    return fetchApi<DesignTemplatePage>(`/v1/admin/design/templates/${templateId}/pages`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async duplicateDesignTemplate (id: string): Promise<ApiResponse<DesignTemplate>> {
+    return fetchApi<DesignTemplate>(`/v1/admin/design/templates/${id}/duplicate`, { method: 'POST' })
+  },
+
+  async updateDesignTemplate (
+    id: string,
+    payload: { name?: string; is_active?: boolean; style_tags?: string[] }
+  ): Promise<ApiResponse<DesignTemplate>> {
+    return fetchApi<DesignTemplate>(`/v1/admin/design/templates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async updateDesignTemplatePage (
+    pageId: string,
+    payload: { page_json: Record<string, unknown> }
+  ): Promise<ApiResponse<DesignTemplatePage>> {
+    return fetchApi<DesignTemplatePage>(`/v1/admin/design/template-pages/${pageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  },
+
+  async getDesignFonts (): Promise<ApiResponse<DesignFont[]>> {
+    return fetchApi<DesignFont[]>('/v1/design/fonts', { method: 'GET' })
+  },
+
+  async getDesignFont (id: string): Promise<ApiResponse<DesignFont>> {
+    return fetchApi<DesignFont>(`/v1/design/fonts/${id}`, { method: 'GET' })
+  },
+
+  async getDesignRequests (params: {
+    status?: DesignRequestStatus
+    design_type?: string
+    task_id?: string
+    offset?: number
+    limit?: number
+  } = {}): Promise<ApiResponse<DesignRequest[]>> {
+    const q = new URLSearchParams()
+    if (params.status) q.set('status', params.status)
+    if (params.design_type) q.set('design_type', params.design_type)
+    if (params.task_id) q.set('task_id', params.task_id)
+    if (params.offset != null) q.set('offset', String(params.offset))
+    if (params.limit != null) q.set('limit', String(params.limit))
+    const qs = q.toString()
+    return fetchApi<DesignRequest[]>(`/v1/admin/design/requests${qs ? `?${qs}` : ''}`, { method: 'GET' })
+  },
+
+  async getDesignRequest (id: string): Promise<ApiResponse<DesignRequest>> {
+    return fetchApi<DesignRequest>(`/v1/admin/design/requests/${id}`, { method: 'GET' })
+  },
+
+  async getDesignRequestProjects (requestId: string): Promise<ApiResponse<DesignProject[]>> {
+    return fetchApi<DesignProject[]>(`/v1/admin/design/requests/${requestId}/projects`, { method: 'GET' })
   }
 }

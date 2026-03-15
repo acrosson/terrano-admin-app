@@ -52,7 +52,8 @@ export function AppNavbar ({ onNavigate }: AppNavbarProps = {}) {
   const navItems = [
     { href: '/', label: 'Home' },
     { href: '/tasks', label: 'Tasks' },
-    { href: '/users', label: 'Users' }
+    { href: '/users', label: 'Users' },
+    { href: '/design', label: 'Design' },
   ]
 
   return (
@@ -82,7 +83,7 @@ export function AppNavbar ({ onNavigate }: AppNavbarProps = {}) {
 
       <div className="flex flex-1 flex-col gap-2">
         {navItems.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href)
           return (
             <Button
               key={item.href}
