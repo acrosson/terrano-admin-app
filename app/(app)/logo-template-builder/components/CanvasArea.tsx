@@ -47,6 +47,11 @@ export function CanvasArea () {
   const { document: doc, selectedElementIds, setSelectedElementId, setSelectedElementIds, updateElement, deleteElement, duplicateElement, reorderElement, groupElements, ungroupElement } = useEditorStore()
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; elementId: string } | null>(null)
 
+  const selectedEl = selectedElementIds.length === 1
+    ? doc.elements.find(e => e.id === selectedElementIds[0])
+    : null
+  const isAutoLayoutGroup = selectedEl?.type === 'group' && !!(selectedEl as GroupElement).layout
+
   // Attach transformer to all selected nodes
   useEffect(() => {
     const tr = transformerRef.current
@@ -70,10 +75,17 @@ export function CanvasArea () {
   }
 
   function handleDragEnd (id: string, e: Konva.KonvaEventObject<DragEvent>) {
+    const el = doc.elements.find(el => el.id === id)
+    const group = el?.type === 'group' ? el as GroupElement : null
+    const newX = e.target.x() - artboardX
+    const newY = e.target.y() - artboardY
     updateElement(id, {
-      x: e.target.x() - artboardX,
-      y: e.target.y() - artboardY
+      x: group?.centerH ? el!.x : newX,
+      y: group?.centerV ? el!.y : newY,
     } as Partial<EditorElement>)
+    // Snap node back to constrained position visually
+    if (group?.centerH) e.target.x(artboardX + el!.x)
+    if (group?.centerV) e.target.y(artboardY + el!.y)
   }
 
   function handleTransformEnd (id: string, e: Konva.KonvaEventObject<Event>) {
@@ -107,8 +119,10 @@ export function CanvasArea () {
       const pts = (el as LineElement).points
       ;(patch as Record<string, unknown>).points = [pts[0], pts[1], pts[2] * scaleX, pts[3] * scaleY]
     } else if (el.type === 'group') {
-      // Distribute scale into children
-      ;(patch as Record<string, unknown>).children = scaleGroupChildren((el as GroupElement).children, scaleX, scaleY)
+      // Distribute scale into children (skip for auto-layout groups — anchors disabled but defensive)
+      if (!(el as GroupElement).layout) {
+        ;(patch as Record<string, unknown>).children = scaleGroupChildren((el as GroupElement).children, scaleX, scaleY)
+      }
     }
 
     updateElement(id, patch as Partial<EditorElement>)
@@ -228,7 +242,9 @@ export function CanvasArea () {
             ref={transformerRef}
             rotateEnabled={true}
             keepRatio={false}
-            enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+            enabledAnchors={isAutoLayoutGroup
+              ? []
+              : ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
             boundBoxFunc={(oldBox, newBox) => {
               if (newBox.width < 5 || newBox.height < 5) return oldBox
               return newBox

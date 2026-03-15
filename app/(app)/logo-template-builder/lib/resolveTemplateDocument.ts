@@ -1,5 +1,6 @@
 import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
+import { computeAutoLayout, getChildrenBounds } from './computeAutoLayout'
 
 type VarsMap = Record<string, Record<string, string | undefined>>
 
@@ -19,7 +20,7 @@ function resolveTextBind (text: string, bind: string | undefined, vars: PreviewV
   return map[ns]?.[key] ?? text
 }
 
-function resolveElement (el: EditorElement, vars: PreviewVariables): EditorElement {
+function resolveElement (el: EditorElement, vars: PreviewVariables, canvasWidth: number, canvasHeight: number): EditorElement {
   switch (el.type) {
     case 'text':
       return {
@@ -57,11 +58,22 @@ function resolveElement (el: EditorElement, vars: PreviewVariables): EditorEleme
         ...el,
         iconColor: el.iconColor ? resolveTokens(el.iconColor, vars) : el.iconColor,
       }
-    case 'group':
-      return {
-        ...el,
-        children: (el as GroupElement).children.map(child => resolveElement(child, vars)),
-      } satisfies GroupElement
+    case 'group': {
+      const group = el as GroupElement
+      let children = group.children.map(child => resolveElement(child, vars, canvasWidth, canvasHeight))
+      // Recalculate auto-layout with resolved text (measured widths may have changed)
+      if (group.layout) {
+        children = computeAutoLayout(children, group.layout)
+      }
+      const resolved: GroupElement = { ...group, children }
+      // Recenter if centering flags are set
+      if (group.centerH || group.centerV) {
+        const bounds = getChildrenBounds(children)
+        if (group.centerH) resolved.x = (canvasWidth - bounds.width) / 2
+        if (group.centerV) resolved.y = (canvasHeight - bounds.height) / 2
+      }
+      return resolved
+    }
     default:
       return el
   }
@@ -74,6 +86,6 @@ export function resolveTemplateDocument (doc: TemplateDocument, vars: PreviewVar
       ...doc.canvas,
       background: resolveTokens(doc.canvas.background, vars),
     },
-    elements: doc.elements.map(el => resolveElement(el, vars))
+    elements: doc.elements.map(el => resolveElement(el, vars, doc.canvas.width, doc.canvas.height))
   }
 }

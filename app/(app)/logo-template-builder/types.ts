@@ -87,9 +87,22 @@ export interface IconPlaceholderElement extends BaseElement {
   iconColor?: string       // Color applied to the SVG (replaces currentColor)
 }
 
+export type AutoLayoutDirection = 'horizontal' | 'vertical'
+export type AutoLayoutAlign = 'start' | 'center' | 'end'
+
+export interface AutoLayout {
+  direction: AutoLayoutDirection
+  gap: number         // px between children on main axis
+  align: AutoLayoutAlign  // cross-axis alignment
+  padding: number     // uniform inner padding on all sides
+}
+
 export interface GroupElement extends BaseElement {
   type: 'group'
   children: EditorElement[]  // positions are relative to the group's x,y
+  layout?: AutoLayout   // undefined = free layout (existing behaviour)
+  centerH?: boolean     // keep group horizontally centered on canvas
+  centerV?: boolean     // keep group vertically centered on canvas
 }
 
 export type EditorElement =

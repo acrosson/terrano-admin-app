@@ -1,13 +1,13 @@
 'use client'
 
-import { useEditorStore } from '../store'
-import type { EditorElement, CurvedTextElement, TextElement } from '../types'
+import { useEditorStore, findElementById } from '../store'
+import type { EditorElement, CurvedTextElement, TextElement, GroupElement } from '../types'
 import { useFonts } from '../hooks/useFonts'
 
 export function PropertiesPanel () {
-  const { document: doc, selectedElementId, updateElement, updateCanvas } = useEditorStore()
+  const { document: doc, selectedElementId, updateElement, updateCanvas, setGroupLayout, setGroupCenter } = useEditorStore()
   const { fonts } = useFonts()
-  const el = doc.elements.find(e => e.id === selectedElementId) ?? null
+  const el = selectedElementId ? findElementById(doc.elements, selectedElementId) : null
 
   if (!selectedElementId || !el) {
     return (
@@ -207,13 +207,89 @@ export function PropertiesPanel () {
             <Field label="Icon Color"><ColorBindInput value={el.iconColor ?? '#000000'} onChange={v => patch({ iconColor: v })} /></Field>
           </>
         )}
+
+        {el.type === 'group' && (() => {
+          const group = el as GroupElement
+          const layout = group.layout
+          return (
+            <>
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-600 dark:text-zinc-300">Auto Layout</span>
+                <Switch
+                  size="sm"
+                  isSelected={!!layout}
+                  onValueChange={on => setGroupLayout(el.id, on
+                    ? { direction: 'vertical', gap: 16, align: 'center', padding: 0 }
+                    : undefined
+                  )}
+                />
+              </div>
+              {layout && (
+                <>
+                  <Field label="Direction">
+                    <div className="flex gap-1">
+                      {(['horizontal', 'vertical'] as const).map(d => (
+                        <button
+                          key={d}
+                          onClick={() => setGroupLayout(el.id, { ...layout, direction: d })}
+                          className={`flex-1 rounded py-1 text-xs capitalize ${layout.direction === d ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                  <Field label="Gap">
+                    <NumberInput value={layout.gap} onChange={v => setGroupLayout(el.id, { ...layout, gap: v })} />
+                  </Field>
+                  <Field label="Align">
+                    <div className="flex gap-1">
+                      {(['start', 'center', 'end'] as const).map(a => (
+                        <button
+                          key={a}
+                          onClick={() => setGroupLayout(el.id, { ...layout, align: a })}
+                          className={`flex-1 rounded py-1 text-xs capitalize ${layout.align === a ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                  <Field label="Padding">
+                    <NumberInput value={layout.padding} onChange={v => setGroupLayout(el.id, { ...layout, padding: v })} />
+                  </Field>
+                </>
+              )}
+
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Canvas Centering</span>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-600 dark:text-zinc-300">Center Horizontally</span>
+                <Switch
+                  size="sm"
+                  isSelected={!!group.centerH}
+                  onValueChange={on => setGroupCenter(el.id, on, !!group.centerV)}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-600 dark:text-zinc-300">Center Vertically</span>
+                <Switch
+                  size="sm"
+                  isSelected={!!group.centerV}
+                  onValueChange={on => setGroupCenter(el.id, !!group.centerH, on)}
+                />
+              </div>
+            </>
+          )
+        })()}
       </div>
     </div>
   )
 }
 
 import type { DesignFont } from '@/lib/api/client'
-import { Select, SelectItem } from '@heroui/react'
+import { Select, SelectItem, Switch } from '@heroui/react'
 
 function FontPicker ({
   fonts,

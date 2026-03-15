@@ -1,11 +1,76 @@
 import { create } from 'zustand'
 import { nanoid } from 'nanoid'
-import type { TemplateDocument, EditorElement, GroupElement } from './types'
+import type { TemplateDocument, EditorElement, GroupElement, AutoLayout } from './types'
 import type { PreviewVariables } from './previewTypes'
 import { DEFAULT_PREVIEW_VARIABLES } from './previewTypes'
+import { computeAutoLayout, getChildrenBounds, syncTextWidths } from './lib/computeAutoLayout'
 
 const ARTBOARD_W = 800
 const ARTBOARD_H = 800
+
+/** Recursively find an element by id, searching into group children. */
+export function findElementById (elements: EditorElement[], id: string): EditorElement | null {
+  for (const el of elements) {
+    if (el.id === id) return el
+    if (el.type === 'group') {
+      const found = findElementById((el as GroupElement).children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+/** Recursively update a child element inside groups.
+ *  Returns the new top-level elements array with the child patched
+ *  and any parent group re-laid-out / re-centered. */
+function updateElementRecursive (
+  elements: EditorElement[],
+  id: string,
+  patch: Partial<EditorElement>,
+  canvas: { width: number; height: number }
+): EditorElement[] {
+  return elements.map(el => {
+    if (el.id === id) {
+      return { ...el, ...patch } as EditorElement
+    }
+    if (el.type === 'group') {
+      const group = el as GroupElement
+      const childIds = collectIds(group.children)
+      if (!childIds.has(id)) return el
+      // Recurse into children
+      let newChildren = updateElementRecursive(group.children, id, patch, canvas)
+      // Re-run auto-layout if enabled
+      if (group.layout) {
+        newChildren = computeAutoLayout(newChildren, group.layout)
+      } else {
+        newChildren = syncTextWidths(newChildren)
+      }
+      const updated: GroupElement = { ...group, children: newChildren }
+      // Re-center if centering is active
+      if (group.centerH || group.centerV) {
+        const bounds = getChildrenBounds(newChildren)
+        if (group.centerH) updated.x = (canvas.width - bounds.width) / 2
+        if (group.centerV) updated.y = (canvas.height - bounds.height) / 2
+      }
+      return updated
+    }
+    return el
+  })
+}
+
+/** Collect all IDs in a tree of elements (including nested group children). */
+function collectIds (elements: EditorElement[]): Set<string> {
+  const ids = new Set<string>()
+  for (const el of elements) {
+    ids.add(el.id)
+    if (el.type === 'group') {
+      for (const cid of collectIds((el as GroupElement).children)) {
+        ids.add(cid)
+      }
+    }
+  }
+  return ids
+}
 
 const DEFAULT_DOCUMENT: TemplateDocument = {
   version: 1,
@@ -31,6 +96,8 @@ interface EditorState {
   ungroupElement: (id: string) => void
   replaceDocument: (doc: TemplateDocument) => void
   updateCanvas: (patch: Partial<TemplateDocument['canvas']>) => void
+  setGroupLayout: (id: string, layout: AutoLayout | undefined) => void
+  setGroupCenter: (id: string, centerH: boolean, centerV: boolean) => void
   setMode: (mode: 'builder' | 'preview') => void
   updatePreviewVariables: (patch: Partial<PreviewVariables>) => void
 }
@@ -50,14 +117,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   updateElement: (id, patch) => {
-    set(s => ({
-      document: {
-        ...s.document,
-        elements: s.document.elements.map(el =>
-          el.id === id ? { ...el, ...patch } as EditorElement : el
-        )
-      }
-    }))
+    set(s => {
+      const canvas = s.document.canvas
+      const elements = updateElementRecursive(s.document.elements, id, patch, canvas)
+      return { document: { ...s.document, elements } }
+    })
   },
 
   deleteElement: (id) => {
@@ -137,6 +201,49 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       selectedElementIds: children.map(c => c.id),
       selectedElementId: children[children.length - 1]?.id ?? null
     })
+  },
+
+  setGroupLayout: (id, layout) => {
+    const el = get().document.elements.find(e => e.id === id)
+    if (!el || el.type !== 'group') return
+    const group = el as GroupElement
+    const newChildren = layout
+      ? computeAutoLayout(group.children, layout)
+      : group.children
+    const updated = { ...group, layout, children: newChildren }
+    // Re-center if centering is active
+    const canvas = get().document.canvas
+    if (updated.centerH || updated.centerV) {
+      const bounds = getChildrenBounds(newChildren)
+      if (updated.centerH) updated.x = (canvas.width - bounds.width) / 2
+      if (updated.centerV) updated.y = (canvas.height - bounds.height) / 2
+    }
+    set(s => ({
+      document: {
+        ...s.document,
+        elements: s.document.elements.map(e =>
+          e.id === id ? updated as GroupElement : e
+        )
+      }
+    }))
+  },
+
+  setGroupCenter: (id, centerH, centerV) => {
+    const el = get().document.elements.find(e => e.id === id)
+    if (!el || el.type !== 'group') return
+    const group = el as GroupElement
+    const canvas = get().document.canvas
+    const bounds = getChildrenBounds(group.children)
+    const x = centerH ? (canvas.width - bounds.width) / 2 : group.x
+    const y = centerV ? (canvas.height - bounds.height) / 2 : group.y
+    set(s => ({
+      document: {
+        ...s.document,
+        elements: s.document.elements.map(e =>
+          e.id === id ? { ...e, centerH, centerV, x, y } as GroupElement : e
+        )
+      }
+    }))
   },
 
   replaceDocument: (doc) => set({ document: doc, selectedElementId: null, selectedElementIds: [] }),
