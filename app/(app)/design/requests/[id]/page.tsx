@@ -31,9 +31,16 @@ function toPreviewVariables (vars: Record<string, string>): PreviewVariables {
     text: {
       wordmark: vars['text.wordmark'] ?? '',
       tagline: vars['text.tagline'],
+      initials: vars['text.initials'],
+      est_year: vars['text.est_year'],
+      wordmark_part1: vars['text.wordmark_part1'],
+      wordmark_part2: vars['text.wordmark_part2'],
     },
     icon: {
       primaryUrl: vars['icon.primary'] ? `${ICON_S3_BASE}/${vars['icon.primary']}` : undefined,
+      custom_brandmarkUrl: vars['icon.custom_brandmark'] ? `${ICON_S3_BASE}/${vars['icon.custom_brandmark']}` : undefined,
+      custom_wordmarkUrl: vars['icon.custom_wordmark'] ? `${ICON_S3_BASE}/${vars['icon.custom_wordmark']}` : undefined,
+      custom_comboUrl: vars['icon.custom_combo'] ? `${ICON_S3_BASE}/${vars['icon.custom_combo']}` : undefined,
     },
     color: {
       primary: vars['color.primary'] ?? '#000000',
@@ -48,7 +55,7 @@ function toPreviewVariables (vars: Record<string, string>): PreviewVariables {
 
 const CANVAS_PADDING = 40
 
-function ProjectCard ({ project, fontsReady }: { project: DesignProject; fontsReady: boolean }) {
+function ProjectCard ({ project, fontsReady, requestId }: { project: DesignProject; fontsReady: boolean; requestId: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
 
@@ -75,7 +82,10 @@ function ProjectCard ({ project, fontsReady }: { project: DesignProject; fontsRe
   const offset = -(CANVAS_PADDING * scale)
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+    <a
+      href={`/design/requests/${requestId}/projects/${project.id}`}
+      className="block overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900"
+    >
       {/* Canvas preview — full width, square aspect ratio, artboard fills edge to edge */}
       <div
         ref={containerRef}
@@ -114,7 +124,7 @@ function ProjectCard ({ project, fontsReady }: { project: DesignProject; fontsRe
           )}
         </div>
       </div>
-    </div>
+    </a>
   )
 }
 
@@ -132,7 +142,7 @@ export default function DesignRequestDetailPage () {
       api.getDesignRequestProjects(id),
     ]).then(([reqRes, projRes]) => {
       setRequest(reqRes.data)
-      setProjects(projRes.data ?? [])
+      setProjects((projRes.data ?? []).slice().sort((a, b) => a.sort_order - b.sort_order))
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
 
@@ -194,7 +204,7 @@ export default function DesignRequestDetailPage () {
         ) : (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {projects.map(project => (
-              <ProjectCard key={project.id} project={project} fontsReady={fontsReady} />
+              <ProjectCard key={project.id} project={project} fontsReady={fontsReady} requestId={id} />
             ))}
           </div>
         )}

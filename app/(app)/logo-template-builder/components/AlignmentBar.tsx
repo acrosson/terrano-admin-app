@@ -2,14 +2,16 @@
 
 import { Button, ButtonGroup } from '@heroui/react'
 import { useEditorStore } from '../store'
-import type { EditorElement, RectElement, CircleElement, TextElement, IconPlaceholderElement, LineElement, CurvedTextElement } from '../types'
+import type { EditorElement, RectElement, TextElement, SplitTextElement, IconPlaceholderElement, PresetIconElement, LineElement } from '../types'
 
 function getAlignedX (el: EditorElement, canvasWidth: number): number {
   switch (el.type) {
     case 'rect':
     case 'text':
+    case 'split_text':
     case 'icon_placeholder':
-      return (canvasWidth - (el as RectElement | TextElement | IconPlaceholderElement).width) / 2
+    case 'preset_icon':
+      return (canvasWidth - (el as RectElement | TextElement | SplitTextElement | IconPlaceholderElement | PresetIconElement).width) / 2
     case 'circle':
     case 'curved_text':
       return canvasWidth / 2
@@ -29,12 +31,15 @@ function getAlignedY (el: EditorElement, canvasHeight: number): number {
   switch (el.type) {
     case 'rect':
     case 'icon_placeholder':
-      return (canvasHeight - (el as RectElement | IconPlaceholderElement).height) / 2
+    case 'preset_icon':
+      return (canvasHeight - (el as RectElement | IconPlaceholderElement | PresetIconElement).height) / 2
     case 'circle':
     case 'curved_text':
       return canvasHeight / 2
     case 'text':
       return (canvasHeight - (el as TextElement).fontSize) / 2
+    case 'split_text':
+      return (canvasHeight - (el as SplitTextElement).fontSize) / 2
     case 'line': {
       const pts = (el as LineElement).points
       const midY = (pts[1] + pts[3]) / 2

@@ -8,7 +8,7 @@ import {
   DropdownItem
 } from '@heroui/react'
 import { useEditorStore } from '../store'
-import type { EditorElement, GroupElement } from '../types'
+import type { EditorElement, SplitTextElement, GroupElement } from '../types'
 
 const TYPE_ICON: Record<EditorElement['type'], string> = {
   rect: '▭',
@@ -16,7 +16,9 @@ const TYPE_ICON: Record<EditorElement['type'], string> = {
   line: '─',
   text: 'T',
   curved_text: '↷',
+  split_text: 'T₂',
   icon_placeholder: '⊞',
+  preset_icon: '⊡',
   group: '▣'
 }
 
@@ -26,7 +28,9 @@ const TYPE_LABEL: Record<EditorElement['type'], string> = {
   line: 'Line',
   text: 'Text',
   curved_text: 'Curved Text',
+  split_text: 'Split Text',
   icon_placeholder: 'Icon',
+  preset_icon: 'Preset Icon',
   group: 'Group'
 }
 
@@ -34,6 +38,7 @@ function getElementLabel (el: EditorElement): string {
   if (el.name) return el.name
   if (el.type === 'text') return `"${el.text.slice(0, 16)}${el.text.length > 16 ? '…' : ''}"`
   if (el.type === 'curved_text') return `"${el.text.slice(0, 16)}${el.text.length > 16 ? '…' : ''}"`
+  if (el.type === 'split_text') { const st = el as SplitTextElement; return `"${(st.part1.text + st.part2.text).slice(0, 16)}"` }
   if (el.type === 'icon_placeholder') return el.label
   if (el.type === 'group') return `Group (${(el as GroupElement).children.length})`
   return TYPE_LABEL[el.type]

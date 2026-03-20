@@ -4,7 +4,9 @@ export type ElementType =
   | 'line'
   | 'text'
   | 'curved_text'
+  | 'split_text'
   | 'icon_placeholder'
+  | 'preset_icon'
   | 'group'
 
 export interface CanvasSettings {
@@ -75,6 +77,26 @@ export interface CurvedTextElement extends BaseElement {
   bind?: string  // e.g. 'text.wordmark', 'text.tagline'
 }
 
+export interface SplitTextPart {
+  text: string
+  fontWeight?: number
+  fontStyle?: string    // 'normal' | 'italic'
+  fill?: string         // defaults to parent fill if absent
+  bind?: string         // e.g. 'text.wordmark_part1'
+}
+
+export interface SplitTextElement extends BaseElement {
+  type: 'split_text'
+  part1: SplitTextPart
+  part2: SplitTextPart
+  // shared
+  fontFamily: string
+  fontSize: number
+  fill: string          // fallback color for parts that omit fill
+  align?: 'left' | 'center' | 'right'
+  width: number         // bounding box width (used by Transformer)
+}
+
 export interface IconPlaceholderElement extends BaseElement {
   type: 'icon_placeholder'
   width: number
@@ -87,6 +109,15 @@ export interface IconPlaceholderElement extends BaseElement {
   iconPreviewUrl?: string  // URL for canvas/preview rendering
   iconColor?: string       // Color applied to the SVG (replaces currentColor)
   sizeBind?: SizeBind
+}
+
+export interface PresetIconElement extends BaseElement {
+  type: 'preset_icon'
+  width: number
+  height: number
+  iconId: string           // design icon ID from the API
+  iconUrl: string          // full S3 URL for rendering
+  iconColor?: string       // color applied to the SVG (replaces currentColor)
 }
 
 export interface SizeBind {
@@ -120,7 +151,9 @@ export type EditorElement =
   | LineElement
   | TextElement
   | CurvedTextElement
+  | SplitTextElement
   | IconPlaceholderElement
+  | PresetIconElement
   | GroupElement
 
 export interface TemplateDocument {

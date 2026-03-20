@@ -20,6 +20,8 @@ import {
   ModalBody,
   ModalFooter,
   Input,
+  Select,
+  SelectItem,
   Dropdown,
   DropdownTrigger,
   DropdownMenu,
@@ -27,10 +29,18 @@ import {
 } from '@heroui/react'
 import { addToast } from '@heroui/toast'
 import { api } from '@/lib/api/client'
-import type { ColorPalette } from '@/lib/api/client'
+import type { ColorPalette, PaletteTheme } from '@/lib/api/client'
+
+const THEMES: PaletteTheme[] = ['LIGHT', 'DARK', 'VIBRANT']
 
 function slugify (name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function normalizeColor (value: string): string {
+  const v = value.trim()
+  if (!v) return v
+  return v.startsWith('#') ? v : `#${v}`
 }
 
 function ColorSwatch ({ color }: { color: string }) {
@@ -64,6 +74,7 @@ export default function PalettesPage () {
   const [background, setBackground] = useState('#000000')
   const [primary, setPrimary] = useState('#ffffff')
   const [secondary, setSecondary] = useState('#cccccc')
+  const [theme, setTheme] = useState<PaletteTheme>('DARK')
   const [creating, setCreating] = useState(false)
 
   const load = useCallback(() => {
@@ -88,6 +99,7 @@ export default function PalettesPage () {
         secondary,
         color_tags: [],
         mood_tags: [],
+        theme,
         is_active: true,
       })
       if (res.data) {
@@ -136,6 +148,7 @@ export default function PalettesPage () {
           <TableHeader>
             <TableColumn className="w-20">Preview</TableColumn>
             <TableColumn>Name</TableColumn>
+            <TableColumn>Theme</TableColumn>
             <TableColumn>Tags</TableColumn>
             <TableColumn>Status</TableColumn>
             <TableColumn>Created</TableColumn>
@@ -152,6 +165,13 @@ export default function PalettesPage () {
                   <PalettePreview palette={palette} />
                 </TableCell>
                 <TableCell className="font-medium">{palette.name}</TableCell>
+                <TableCell>
+                  <Chip size="sm" variant="flat" color={
+                    palette.theme === 'DARK' ? 'default' : palette.theme === 'VIBRANT' ? 'secondary' : 'primary'
+                  }>
+                    {palette.theme.toLowerCase()}
+                  </Chip>
+                </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
                     {palette.color_tags.slice(0, 3).map(tag => (
@@ -221,7 +241,7 @@ export default function PalettesPage () {
                   onChange={e => setBackground(e.target.value)}
                   className="h-9 w-9 cursor-pointer rounded border border-zinc-200 p-0.5 dark:border-zinc-600"
                 />
-                <Input size="sm" value={background} onValueChange={setBackground} className="font-mono" />
+                <Input size="sm" value={background} onValueChange={v => setBackground(normalizeColor(v))} className="font-mono" />
               </div>
             </div>
             <div className="space-y-2">
@@ -233,7 +253,7 @@ export default function PalettesPage () {
                   onChange={e => setPrimary(e.target.value)}
                   className="h-9 w-9 cursor-pointer rounded border border-zinc-200 p-0.5 dark:border-zinc-600"
                 />
-                <Input size="sm" value={primary} onValueChange={setPrimary} className="font-mono" />
+                <Input size="sm" value={primary} onValueChange={v => setPrimary(normalizeColor(v))} className="font-mono" />
               </div>
             </div>
             <div className="space-y-2">
@@ -245,9 +265,21 @@ export default function PalettesPage () {
                   onChange={e => setSecondary(e.target.value)}
                   className="h-9 w-9 cursor-pointer rounded border border-zinc-200 p-0.5 dark:border-zinc-600"
                 />
-                <Input size="sm" value={secondary} onValueChange={setSecondary} className="font-mono" />
+                <Input size="sm" value={secondary} onValueChange={v => setSecondary(normalizeColor(v))} className="font-mono" />
               </div>
             </div>
+            <Select
+              label="Theme"
+              selectedKeys={[theme]}
+              onSelectionChange={keys => {
+                const val = Array.from(keys)[0] as PaletteTheme
+                if (val) setTheme(val)
+              }}
+            >
+              {THEMES.map(t => (
+                <SelectItem key={t}>{t.toLowerCase()}</SelectItem>
+              ))}
+            </Select>
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setModalOpen(false)}>Cancel</Button>

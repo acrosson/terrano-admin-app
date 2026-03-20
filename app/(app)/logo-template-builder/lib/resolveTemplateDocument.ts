@@ -1,4 +1,4 @@
-import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement, GroupElement } from '../types'
+import type { TemplateDocument, EditorElement, TextElement, CurvedTextElement, SplitTextElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
 import { computeAutoLayout, getChildrenBounds, resolveSizeBindings } from './computeAutoLayout'
 
@@ -36,6 +36,21 @@ function resolveElement (el: EditorElement, vars: PreviewVariables, canvasWidth:
         fill: resolveTokens(el.fill, vars),
         fontFamily: resolveTokens(el.fontFamily, vars),
       } satisfies CurvedTextElement
+    case 'split_text':
+      return {
+        ...el,
+        fill: resolveTokens(el.fill, vars),
+        part1: {
+          ...el.part1,
+          text: resolveTextBind(el.part1.text, el.part1.bind, vars),
+          fill: el.part1.fill ? resolveTokens(el.part1.fill, vars) : undefined,
+        },
+        part2: {
+          ...el.part2,
+          text: resolveTextBind(el.part2.text, el.part2.bind, vars),
+          fill: el.part2.fill ? resolveTokens(el.part2.fill, vars) : undefined,
+        },
+      } satisfies SplitTextElement
     case 'rect':
       return {
         ...el,
@@ -54,6 +69,11 @@ function resolveElement (el: EditorElement, vars: PreviewVariables, canvasWidth:
         stroke: resolveTokens(el.stroke, vars),
       }
     case 'icon_placeholder':
+      return {
+        ...el,
+        iconColor: el.iconColor ? resolveTokens(el.iconColor, vars) : el.iconColor,
+      }
+    case 'preset_icon':
       return {
         ...el,
         iconColor: el.iconColor ? resolveTokens(el.iconColor, vars) : el.iconColor,

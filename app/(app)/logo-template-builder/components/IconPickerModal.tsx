@@ -21,9 +21,10 @@ interface IconPickerModalProps {
   isOpen: boolean
   onClose: () => void
   onSelect: (icon: DesignIcon) => void
+  usageType?: string
 }
 
-export function IconPickerModal ({ isOpen, onClose, onSelect }: IconPickerModalProps) {
+export function IconPickerModal ({ isOpen, onClose, onSelect, usageType }: IconPickerModalProps) {
   const [query, setQuery] = useState('')
   const [icons, setIcons] = useState<DesignIcon[]>([])
   const [loading, setLoading] = useState(false)
@@ -37,6 +38,7 @@ export function IconPickerModal ({ isOpen, onClose, onSelect }: IconPickerModalP
       const res = await api.getDesignIcons({
         tag: tag.trim() || undefined,
         is_active: true,
+        usage_type: usageType,
         page: p,
         per_page: PER_PAGE,
       })

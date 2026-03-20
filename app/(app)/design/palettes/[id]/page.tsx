@@ -7,6 +7,8 @@ import {
   BreadcrumbItem,
   Button,
   Input,
+  Select,
+  SelectItem,
   Switch,
   Chip,
   Spinner,
@@ -16,7 +18,9 @@ import {
 } from '@heroui/react'
 import { addToast } from '@heroui/toast'
 import { api } from '@/lib/api/client'
-import type { ColorPalette } from '@/lib/api/client'
+import type { ColorPalette, PaletteTheme } from '@/lib/api/client'
+
+const THEMES: PaletteTheme[] = ['LIGHT', 'DARK', 'VIBRANT']
 
 function slugify (name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -51,15 +55,17 @@ function TagInput ({
   label,
   tags,
   onChange,
+  suggestions,
 }: {
   label: string
   tags: string[]
   onChange: (tags: string[]) => void
+  suggestions?: string[]
 }) {
   const [input, setInput] = useState('')
 
-  function addTag () {
-    const tag = input.trim().toLowerCase()
+  function addTag (value?: string) {
+    const tag = (value ?? input).trim().toLowerCase()
     if (!tag || tags.includes(tag)) { setInput(''); return }
     onChange([...tags, tag])
     setInput('')
@@ -69,17 +75,14 @@ function TagInput ({
     onChange(tags.filter(t => t !== tag))
   }
 
+  const unusedSuggestions = suggestions?.filter(s => !tags.includes(s))
+
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
       <div className="flex flex-wrap gap-1.5 min-h-8">
         {tags.map(tag => (
-          <Chip
-            key={tag}
-            size="sm"
-            variant="flat"
-            onClose={() => removeTag(tag)}
-          >
+          <Chip key={tag} size="sm" variant="flat" onClose={() => removeTag(tag)}>
             {tag}
           </Chip>
         ))}
@@ -92,8 +95,21 @@ function TagInput ({
           onValueChange={setInput}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
         />
-        <Button size="sm" variant="flat" onPress={addTag}>Add</Button>
+        <Button size="sm" variant="flat" onPress={() => addTag()}>Add</Button>
       </div>
+      {unusedSuggestions && unusedSuggestions.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {unusedSuggestions.map(s => (
+            <button
+              key={s}
+              onClick={() => addTag(s)}
+              className="rounded-full border border-dashed border-zinc-300 px-2 py-0.5 text-xs text-zinc-400 hover:border-zinc-400 hover:text-zinc-600 dark:border-zinc-600 dark:text-zinc-500 dark:hover:border-zinc-400 dark:hover:text-zinc-300 transition-colors"
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -132,6 +148,7 @@ export default function PaletteEditorPage ({ params }: { params: Promise<{ id: s
   const [secondary, setSecondary] = useState('#cccccc')
   const [colorTags, setColorTags] = useState<string[]>([])
   const [moodTags, setMoodTags] = useState<string[]>([])
+  const [theme, setTheme] = useState<PaletteTheme>('DARK')
   const [isActive, setIsActive] = useState(true)
 
   useEffect(() => {
@@ -146,6 +163,7 @@ export default function PaletteEditorPage ({ params }: { params: Promise<{ id: s
         setSecondary(p.secondary)
         setColorTags(p.color_tags)
         setMoodTags(p.mood_tags)
+        setTheme(p.theme)
         setIsActive(p.is_active)
       })
       .catch(() => addToast({ title: 'Failed to load palette', color: 'danger' }))
@@ -163,6 +181,7 @@ export default function PaletteEditorPage ({ params }: { params: Promise<{ id: s
         secondary,
         color_tags: colorTags,
         mood_tags: moodTags,
+        theme,
         is_active: isActive,
       })
       addToast({ title: 'Palette saved', color: 'success' })
@@ -222,6 +241,19 @@ export default function PaletteEditorPage ({ params }: { params: Promise<{ id: s
             <ColorField label="Primary" value={primary} onChange={setPrimary} />
             <ColorField label="Secondary" value={secondary} onChange={setSecondary} />
 
+            <Select
+              label="Theme"
+              selectedKeys={[theme]}
+              onSelectionChange={keys => {
+                const val = Array.from(keys)[0] as PaletteTheme
+                if (val) setTheme(val)
+              }}
+            >
+              {THEMES.map(t => (
+                <SelectItem key={t}>{t.toLowerCase()}</SelectItem>
+              ))}
+            </Select>
+
             <div className="flex items-center justify-between pt-1">
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Active</span>
               <Switch isSelected={isActive} onValueChange={setIsActive} size="sm" />
@@ -234,7 +266,12 @@ export default function PaletteEditorPage ({ params }: { params: Promise<{ id: s
             <p className="text-sm font-semibold uppercase tracking-wider text-zinc-500">Tags</p>
             <TagInput label="Color Tags" tags={colorTags} onChange={setColorTags} />
             <Divider />
-            <TagInput label="Mood Tags" tags={moodTags} onChange={setMoodTags} />
+            <TagInput
+              label="Mood Tags"
+              tags={moodTags}
+              onChange={setMoodTags}
+              suggestions={['trust', 'innovation', 'luxury', 'approachable', 'energetic', 'professional', 'creative', 'reliable', 'bold', 'calm']}
+            />
           </CardBody>
         </Card>
       </div>

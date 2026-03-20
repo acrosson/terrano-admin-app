@@ -33,8 +33,18 @@ export function Toolbar () {
     useEditorStore.getState().setSelectedElementId(id)
   }
 
+  function addSplitText () {
+    const id = addElement({ type: 'split_text', x: cx - 150, y: cy, fontFamily: 'Montserrat', fontSize: 32, fill: '#000000', width: 300, rotation: 0, draggable: true, part1: { text: 'Company', fontWeight: 700, bind: 'text.wordmark_part1' }, part2: { text: 'Name', fontWeight: 400, bind: 'text.wordmark_part2' } } as Omit<import('../types').SplitTextElement, 'id'>)
+    useEditorStore.getState().setSelectedElementId(id)
+  }
+
   function addIcon () {
     const id = addElement({ type: 'icon_placeholder', x: cx - 60, y: cy - 60, width: 120, height: 120, stroke: '#666666', strokeWidth: 2, label: 'ICON', bind: 'icon.primary', rotation: 0, draggable: true } as Omit<import('../types').IconPlaceholderElement, 'id'>)
+    useEditorStore.getState().setSelectedElementId(id)
+  }
+
+  function addPresetIcon () {
+    const id = addElement({ type: 'preset_icon', x: cx - 60, y: cy - 60, width: 120, height: 120, iconId: '', iconUrl: '', iconColor: '{color.primary}', rotation: 0, draggable: true } as Omit<import('../types').PresetIconElement, 'id'>)
     useEditorStore.getState().setSelectedElementId(id)
   }
 
@@ -46,7 +56,9 @@ export function Toolbar () {
       <ToolButton onClick={addLine} label="Line" icon="─" />
       <ToolButton onClick={addText} label="Text" icon="T" />
       <ToolButton onClick={addCurvedText} label="Curved Text" icon="↷" />
+      <ToolButton onClick={addSplitText} label="Split Text" icon="T₁T₂" />
       <ToolButton onClick={addIcon} label="Icon Placeholder" icon="⊞" />
+      <ToolButton onClick={addPresetIcon} label="Preset Icon" icon="⊡" />
     </div>
   )
 }

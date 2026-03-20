@@ -16,13 +16,26 @@ interface PreviewPanelProps {
 export function PreviewPanel ({ variables, onChange }: PreviewPanelProps) {
   const { fonts } = useFonts()
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
+  const [customIconPicker, setCustomIconPicker] = useState<'brandmark' | 'wordmark' | 'combo' | null>(null)
 
   function handleIconSelect (icon: DesignIcon) {
     onChange({
       icon: {
+        ...variables.icon,
         primaryId: icon.id,
         primaryUrl: designIconUrl(icon),
         primaryName: icon.name,
+      }
+    })
+  }
+
+  function handleCustomIconSelect (slot: 'brandmark' | 'wordmark' | 'combo', icon: DesignIcon) {
+    onChange({
+      icon: {
+        ...variables.icon,
+        [`custom_${slot}Id`]: icon.id,
+        [`custom_${slot}Url`]: designIconUrl(icon),
+        [`custom_${slot}Name`]: icon.name,
       }
     })
   }
@@ -45,6 +58,38 @@ export function PreviewPanel ({ variables, onChange }: PreviewPanelProps) {
             value={variables.text.tagline ?? ''}
             onChange={v => onChange({ text: { ...variables.text, tagline: v } })}
             placeholder="Tagline (optional)"
+          />
+        </Field>
+
+        <Field label="Initials">
+          <TextInput
+            value={variables.text.initials ?? ''}
+            onChange={v => onChange({ text: { ...variables.text, initials: v } })}
+            placeholder="e.g. BC"
+          />
+        </Field>
+
+        <Field label="Est. Year">
+          <TextInput
+            value={variables.text.est_year ?? ''}
+            onChange={v => onChange({ text: { ...variables.text, est_year: v } })}
+            placeholder="e.g. 1987"
+          />
+        </Field>
+
+        <Field label="Wordmark Part 1">
+          <TextInput
+            value={variables.text.wordmark_part1 ?? ''}
+            onChange={v => onChange({ text: { ...variables.text, wordmark_part1: v } })}
+            placeholder="e.g. Hydro"
+          />
+        </Field>
+
+        <Field label="Wordmark Part 2">
+          <TextInput
+            value={variables.text.wordmark_part2 ?? ''}
+            onChange={v => onChange({ text: { ...variables.text, wordmark_part2: v } })}
+            placeholder="e.g. Flask"
           />
         </Field>
 
@@ -75,6 +120,38 @@ export function PreviewPanel ({ variables, onChange }: PreviewPanelProps) {
             onSelect={handleIconSelect}
           />
         </Field>
+
+        {(['brandmark', 'wordmark', 'combo'] as const).map(slot => {
+          const url = variables.icon[`custom_${slot}Url`]
+          const name = variables.icon[`custom_${slot}Name`]
+          return (
+            <Field key={slot} label={`Custom ${slot.charAt(0).toUpperCase() + slot.slice(1)}`}>
+              <div className="flex items-center gap-2">
+                {url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={url}
+                    alt={name ?? slot}
+                    className="h-8 w-8 flex-shrink-0 object-contain dark:invert"
+                  />
+                )}
+                <Button
+                  size="sm"
+                  variant="flat"
+                  className="flex-1"
+                  onPress={() => setCustomIconPicker(slot)}
+                >
+                  {name ?? `Pick ${slot}…`}
+                </Button>
+              </div>
+            </Field>
+          )
+        })}
+        <IconPickerModal
+          isOpen={customIconPicker !== null}
+          onClose={() => setCustomIconPicker(null)}
+          onSelect={icon => { if (customIconPicker) handleCustomIconSelect(customIconPicker, icon) }}
+        />
 
         <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
 

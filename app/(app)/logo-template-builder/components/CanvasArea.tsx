@@ -5,7 +5,7 @@ import { Stage, Layer, Rect, Circle, Line, Text, Group, Shape, Transformer, Imag
 import type Konva from 'konva'
 import { Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from '@heroui/react'
 import { useEditorStore } from '../store'
-import type { EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
+import type { EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, SplitTextElement, IconPlaceholderElement, PresetIconElement, GroupElement } from '../types'
 import { buildFontStyle } from '../hooks/useFonts'
 
 const PADDING = 40 // workspace padding around artboard
@@ -21,7 +21,7 @@ function resolveBuilderColor (value: string | undefined): string | undefined {
 function scaleGroupChildren (children: EditorElement[], scaleX: number, scaleY: number): EditorElement[] {
   return children.map(c => {
     const scaled = { ...c, x: c.x * scaleX, y: c.y * scaleY } as Record<string, unknown>
-    if (c.type === 'rect' || c.type === 'icon_placeholder') {
+    if (c.type === 'rect' || c.type === 'icon_placeholder' || c.type === 'preset_icon') {
       scaled.width = Math.max(5, (c as RectElement).width * scaleX)
       scaled.height = Math.max(5, (c as RectElement).height * scaleY)
     } else if (c.type === 'circle') {
@@ -30,6 +30,8 @@ function scaleGroupChildren (children: EditorElement[], scaleX: number, scaleY: 
       scaled.width = Math.max(20, (c as TextElement).width * scaleX)
     } else if (c.type === 'curved_text') {
       scaled.radius = Math.max(10, (c as CurvedTextElement).radius * Math.min(scaleX, scaleY))
+    } else if (c.type === 'split_text') {
+      scaled.width = Math.max(20, (c as SplitTextElement).width * scaleX)
     } else if (c.type === 'line') {
       const pts = (c as LineElement).points
       scaled.points = [pts[0] * scaleX, pts[1] * scaleY, pts[2] * scaleX, pts[3] * scaleY]
@@ -106,13 +108,15 @@ export function CanvasArea () {
       rotation: node.rotation()
     }
 
-    if (el.type === 'rect' || el.type === 'icon_placeholder') {
+    if (el.type === 'rect' || el.type === 'icon_placeholder' || el.type === 'preset_icon') {
       ;(patch as Record<string, unknown>).width = Math.max(5, (el as RectElement).width * scaleX)
       ;(patch as Record<string, unknown>).height = Math.max(5, (el as RectElement).height * scaleY)
     } else if (el.type === 'circle') {
       ;(patch as Record<string, unknown>).radius = Math.max(5, (el as CircleElement).radius * scaleX)
     } else if (el.type === 'text') {
       ;(patch as Record<string, unknown>).width = Math.max(20, (el as TextElement).width * scaleX)
+    } else if (el.type === 'split_text') {
+      ;(patch as Record<string, unknown>).width = Math.max(20, (el as SplitTextElement).width * scaleX)
     } else if (el.type === 'curved_text') {
       ;(patch as Record<string, unknown>).radius = Math.max(10, (el as CurvedTextElement).radius * scaleX)
     } else if (el.type === 'line') {
@@ -370,9 +374,29 @@ function ElementNode ({ el, artboardX, artboardY, isSelected, onSelect, onContex
     )
   }
 
+  if (el.type === 'split_text') {
+    return (
+      <SplitTextNode
+        el={el}
+        commonProps={commonProps}
+        setRef={setRef}
+      />
+    )
+  }
+
   if (el.type === 'icon_placeholder') {
     return (
       <IconPlaceholderNode
+        el={el}
+        commonProps={commonProps}
+        setRef={setRef}
+      />
+    )
+  }
+
+  if (el.type === 'preset_icon') {
+    return (
+      <PresetIconNode
         el={el}
         commonProps={commonProps}
         setRef={setRef}
@@ -416,7 +440,7 @@ function SelectionHighlight ({ el, artboardX, artboardY }: {
   const y = artboardY + el.y
   const style = { stroke: '#006FEE', strokeWidth: 1.5, dash: [4, 3], listening: false, perfectDrawEnabled: false }
 
-  if (el.type === 'rect' || el.type === 'icon_placeholder') {
+  if (el.type === 'rect' || el.type === 'icon_placeholder' || el.type === 'preset_icon') {
     const e = el as RectElement
     return <Rect x={x} y={y} width={e.width} height={e.height} rotation={el.rotation} {...style} />
   }
@@ -425,6 +449,10 @@ function SelectionHighlight ({ el, artboardX, artboardY }: {
   }
   if (el.type === 'text') {
     const e = el as TextElement
+    return <Rect x={x} y={y} width={e.width} height={e.fontSize * 1.25} rotation={el.rotation} {...style} />
+  }
+  if (el.type === 'split_text') {
+    const e = el as SplitTextElement
     return <Rect x={x} y={y} width={e.width} height={e.fontSize * 1.25} rotation={el.rotation} {...style} />
   }
   if (el.type === 'curved_text') {
@@ -502,6 +530,58 @@ function CurvedTextNode ({ el, commonProps, setRef }: {
   )
 }
 
+function SplitTextNode ({ el, commonProps, setRef }: {
+  el: SplitTextElement
+  commonProps: Record<string, unknown>
+  setRef: (node: Konva.Node | null) => void
+}) {
+  return (
+    <Shape
+      ref={(n) => setRef(n as Konva.Node | null)}
+      {...commonProps}
+      sceneFunc={(ctx, shape) => {
+        ctx.save()
+        ctx.textBaseline = 'alphabetic'
+
+        // Measure both parts first
+        const p1Weight = el.part1.fontWeight ?? 700
+        const p1Style  = el.part1.fontStyle ?? 'normal'
+        ctx.font = `${p1Style} ${p1Weight} ${el.fontSize}px "${el.fontFamily}"`
+        const p1Width = ctx.measureText(el.part1.text).width
+
+        const p2Weight = el.part2.fontWeight ?? 400
+        const p2Style  = el.part2.fontStyle ?? 'normal'
+        ctx.font = `${p2Style} ${p2Weight} ${el.fontSize}px "${el.fontFamily}"`
+        const p2Width = ctx.measureText(el.part2.text).width
+
+        const totalWidth = p1Width + p2Width
+        const startX = el.align === 'center'
+          ? (el.width - totalWidth) / 2
+          : el.align === 'right'
+            ? el.width - totalWidth
+            : 0
+
+        ctx.font = `${p1Style} ${p1Weight} ${el.fontSize}px "${el.fontFamily}"`
+        ctx.fillStyle = resolveBuilderColor(el.part1.fill ?? el.fill) ?? el.fill
+        ctx.fillText(el.part1.text, startX, 0)
+
+        ctx.font = `${p2Style} ${p2Weight} ${el.fontSize}px "${el.fontFamily}"`
+        ctx.fillStyle = resolveBuilderColor(el.part2.fill ?? el.fill) ?? el.fill
+        ctx.fillText(el.part2.text, startX + p1Width, 0)
+
+        ctx.restore()
+        shape.setAttr('width', totalWidth)
+      }}
+      hitFunc={(ctx, shape) => {
+        ctx.beginPath()
+        ctx.rect(0, -el.fontSize, shape.getAttr('width') ?? el.width, el.fontSize * 1.4)
+        ctx.closePath()
+        ctx.fillStrokeShape(shape)
+      }}
+    />
+  )
+}
+
 function useKonvaImage (url: string | undefined, width?: number, height?: number): HTMLImageElement | null {
   const [img, setImg] = useState<HTMLImageElement | null>(null)
   useEffect(() => {
@@ -533,6 +613,52 @@ function useKonvaImage (url: string | undefined, width?: number, height?: number
     }
   }, [url, width, height])
   return img
+}
+
+function PresetIconNode ({ el, commonProps, setRef }: {
+  el: PresetIconElement
+  commonProps: Record<string, unknown>
+  setRef: (node: Konva.Node | null) => void
+}) {
+  const img = useKonvaImage(el.iconUrl || undefined, el.width, el.height)
+
+  if (img) {
+    return (
+      <KonvaImage
+        ref={(n) => setRef(n as Konva.Node | null)}
+        {...commonProps}
+        image={img}
+        width={el.width}
+        height={el.height}
+      />
+    )
+  }
+
+  return (
+    <Group
+      ref={(n) => setRef(n as Konva.Node | null)}
+      {...commonProps}
+    >
+      <Rect
+        width={el.width}
+        height={el.height}
+        stroke="#999999"
+        strokeWidth={1}
+        dash={[6, 4]}
+        fill="rgba(0,0,0,0.03)"
+      />
+      <Text
+        x={0}
+        y={el.height / 2 - 8}
+        width={el.width}
+        text="Preset Icon"
+        fontSize={11}
+        fontFamily="monospace"
+        fill="#999999"
+        align="center"
+      />
+    </Group>
+  )
 }
 
 function IconPlaceholderNode ({ el, commonProps, setRef }: {

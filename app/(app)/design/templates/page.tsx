@@ -32,7 +32,7 @@ import { api } from '@/lib/api/client'
 import type { DesignTemplate } from '@/lib/api/client'
 
 const DESIGN_TYPES = ['LOGO']
-const CATEGORIES = ['WORDMARK', 'ICON_WORDMARK', 'EMBLEM', 'BADGE', 'MONOGRAM', 'ABSTRACT_MARK']
+const CATEGORIES = ['WORDMARK', 'ICON_WORDMARK', 'EMBLEM', 'BADGE', 'MONOGRAM', 'ABSTRACT_MARK', 'CUSTOM']
 
 function slugify (name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')

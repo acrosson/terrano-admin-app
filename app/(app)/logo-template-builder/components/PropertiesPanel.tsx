@@ -1,8 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import { useEditorStore, findElementById } from '../store'
-import type { EditorElement, CurvedTextElement, TextElement, GroupElement, RectElement, IconPlaceholderElement, SizeBind } from '../types'
+import type { EditorElement, CurvedTextElement, TextElement, SplitTextElement, SplitTextPart, GroupElement, RectElement, IconPlaceholderElement, PresetIconElement, SizeBind } from '../types'
 import { useFonts } from '../hooks/useFonts'
+import { IconPickerModal } from './IconPickerModal'
+import { designIconUrl } from '@/lib/api/client'
+import type { DesignIcon } from '@/lib/api/client'
 
 export function PropertiesPanel () {
   const { document: doc, selectedElementId, updateElement, updateCanvas, setGroupLayout, setGroupCenter } = useEditorStore()
@@ -94,7 +98,11 @@ export function PropertiesPanel () {
               >
                 <option value="">— none —</option>
                 <option value="text.wordmark">text.wordmark</option>
+                <option value="text.wordmark_part1">text.wordmark_part1</option>
+                <option value="text.wordmark_part2">text.wordmark_part2</option>
                 <option value="text.tagline">text.tagline</option>
+                <option value="text.initials">text.initials</option>
+                <option value="text.est_year">text.est_year</option>
               </select>
             </Field>
             <Field label="Text">
@@ -143,7 +151,11 @@ export function PropertiesPanel () {
               >
                 <option value="">— none —</option>
                 <option value="text.wordmark">text.wordmark</option>
+                <option value="text.wordmark_part1">text.wordmark_part1</option>
+                <option value="text.wordmark_part2">text.wordmark_part2</option>
                 <option value="text.tagline">text.tagline</option>
+                <option value="text.initials">text.initials</option>
+                <option value="text.est_year">text.est_year</option>
               </select>
             </Field>
             <Field label="Text">
@@ -187,6 +199,139 @@ export function PropertiesPanel () {
           </>
         )}
 
+        {el.type === 'split_text' && (() => {
+          const st = el as SplitTextElement
+          function patchPart (partKey: 'part1' | 'part2', p: Partial<SplitTextPart>) {
+            patch({ [partKey]: { ...st[partKey], ...p } } as Partial<EditorElement>)
+          }
+          const BIND_OPTIONS = [
+            { value: '', label: '— none —' },
+            { value: 'text.wordmark_part1', label: 'text.wordmark_part1' },
+            { value: 'text.wordmark_part2', label: 'text.wordmark_part2' },
+            { value: 'text.wordmark', label: 'text.wordmark' },
+            { value: 'text.tagline', label: 'text.tagline' },
+            { value: 'text.initials', label: 'text.initials' },
+            { value: 'text.est_year', label: 'text.est_year' },
+          ]
+          const selected = fonts.find(f => f.family === st.fontFamily)
+          return (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Part 1</p>
+              <Field label="Bind">
+                <select
+                  value={st.part1.bind ?? ''}
+                  onChange={e => patchPart('part1', { bind: e.target.value || undefined })}
+                  className="w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none dark:border-zinc-600 dark:text-zinc-100"
+                >
+                  {BIND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Text">
+                <TextInput value={st.part1.text} onChange={v => patchPart('part1', { text: v })} />
+              </Field>
+              {selected && (
+                <>
+                  <Field label="Weight">
+                    <select
+                      value={st.part1.fontWeight ?? 700}
+                      onChange={e => patchPart('part1', { fontWeight: Number(e.target.value) })}
+                      className="w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none dark:border-zinc-600 dark:text-zinc-100"
+                    >
+                      {selected.weights.map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </Field>
+                  {selected.styles.length > 1 && (
+                    <Field label="Style">
+                      <div className="flex gap-1">
+                        {selected.styles.map(s => (
+                          <button key={s} onClick={() => patchPart('part1', { fontStyle: s })}
+                            className={`flex-1 rounded py-1 text-xs capitalize ${(st.part1.fontStyle ?? 'normal') === s ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                  )}
+                </>
+              )}
+              <Field label="Color">
+                <ColorBindInput value={st.part1.fill ?? st.fill} onChange={v => patchPart('part1', { fill: v })} />
+              </Field>
+
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Part 2</p>
+              <Field label="Bind">
+                <select
+                  value={st.part2.bind ?? ''}
+                  onChange={e => patchPart('part2', { bind: e.target.value || undefined })}
+                  className="w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none dark:border-zinc-600 dark:text-zinc-100"
+                >
+                  {BIND_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Text">
+                <TextInput value={st.part2.text} onChange={v => patchPart('part2', { text: v })} />
+              </Field>
+              {selected && (
+                <>
+                  <Field label="Weight">
+                    <select
+                      value={st.part2.fontWeight ?? 400}
+                      onChange={e => patchPart('part2', { fontWeight: Number(e.target.value) })}
+                      className="w-full rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm focus:border-primary focus:outline-none dark:border-zinc-600 dark:text-zinc-100"
+                    >
+                      {selected.weights.map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </Field>
+                  {selected.styles.length > 1 && (
+                    <Field label="Style">
+                      <div className="flex gap-1">
+                        {selected.styles.map(s => (
+                          <button key={s} onClick={() => patchPart('part2', { fontStyle: s })}
+                            className={`flex-1 rounded py-1 text-xs capitalize ${(st.part2.fontStyle ?? 'normal') === s ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                  )}
+                </>
+              )}
+              <Field label="Color">
+                <ColorBindInput value={st.part2.fill ?? st.fill} onChange={v => patchPart('part2', { fill: v })} />
+              </Field>
+
+              <div className="border-t border-zinc-100 pt-3 dark:border-zinc-700" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Shared</p>
+              <Field label="Width"><NumberInput value={Math.round(st.width)} onChange={v => patch({ width: v } as Partial<EditorElement>)} /></Field>
+              <Field label="Font Size"><NumberInput value={st.fontSize} onChange={v => patch({ fontSize: v } as Partial<EditorElement>)} /></Field>
+              <FontPicker
+                fonts={fonts}
+                fontFamily={st.fontFamily}
+                fontWeight={undefined}
+                fontStyle={undefined}
+                onFamilyChange={v => patch({ fontFamily: v } as Partial<EditorElement>)}
+                onWeightChange={() => {}}
+                onStyleChange={() => {}}
+              />
+              <Field label="Fallback Fill"><ColorBindInput value={st.fill} onChange={v => patch({ fill: v } as Partial<EditorElement>)} /></Field>
+              <Field label="Align">
+                <div className="flex gap-1">
+                  {(['left', 'center', 'right'] as const).map(a => (
+                    <button
+                      key={a}
+                      onClick={() => patch({ align: a } as Partial<EditorElement>)}
+                      className={`flex-1 rounded py-1 text-xs capitalize ${st.align === a ? 'bg-primary text-white' : 'border border-zinc-200 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300'}`}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </>
+          )
+        })()}
+
         {el.type === 'icon_placeholder' && (
           <>
             <div className="grid grid-cols-2 gap-2">
@@ -202,12 +347,19 @@ export function PropertiesPanel () {
               >
                 <option value="">— none —</option>
                 <option value="icon.primary">icon.primary</option>
+                <option value="icon.custom_brandmark">icon.custom_brandmark</option>
+                <option value="icon.custom_wordmark">icon.custom_wordmark</option>
+                <option value="icon.custom_combo">icon.custom_combo</option>
               </select>
             </Field>
             <p className="text-xs text-zinc-400">Pick an icon in Preview mode</p>
             <Field label="Icon Color"><ColorBindInput value={el.iconColor ?? '#000000'} onChange={v => patch({ iconColor: v })} /></Field>
             <SizeBindSection el={el} siblings={getSiblings(doc.elements, el.id)} patch={patch} />
           </>
+        )}
+
+        {el.type === 'preset_icon' && (
+          <PresetIconSection el={el as PresetIconElement} patch={patch} />
         )}
 
         {el.type === 'group' && (() => {
@@ -562,6 +714,51 @@ function SizeBindSection ({ el, siblings, patch }: {
           </div>
         </>
       )}
+    </>
+  )
+}
+
+function PresetIconSection ({ el, patch }: {
+  el: PresetIconElement
+  patch: (p: Partial<EditorElement>) => void
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  function handleIconSelect (icon: DesignIcon) {
+    patch({ iconId: icon.id, iconUrl: designIconUrl(icon) } as Partial<EditorElement>)
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Width"><NumberInput value={Math.round(el.width)} onChange={v => patch({ width: v })} /></Field>
+        <Field label="Height"><NumberInput value={Math.round(el.height)} onChange={v => patch({ height: v })} /></Field>
+      </div>
+      <Field label="Icon">
+        <div className="flex items-center gap-2">
+          {el.iconUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={el.iconUrl}
+              alt="preset icon"
+              className="h-8 w-8 flex-shrink-0 object-contain dark:invert"
+            />
+          )}
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="flex-1 rounded-md border border-zinc-200 bg-transparent px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            {el.iconUrl ? 'Change Icon…' : 'Pick Icon…'}
+          </button>
+        </div>
+        <IconPickerModal
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={handleIconSelect}
+          usageType="TEMPLATE_PRESET"
+        />
+      </Field>
+      <Field label="Icon Color"><ColorBindInput value={el.iconColor ?? '#000000'} onChange={v => patch({ iconColor: v } as Partial<EditorElement>)} /></Field>
     </>
   )
 }

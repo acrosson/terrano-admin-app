@@ -13,8 +13,7 @@ import { PreviewPanel } from './components/PreviewPanel'
 import { ExportButtons } from './components/ExportButtons'
 import { useEditorStore } from './store'
 import { resolveTemplateDocument } from './lib/resolveTemplateDocument'
-import { exportDocumentToSvg } from './lib/exportToSvg'
-import { SAMPLE_ICONS } from './data/sampleIcons'
+import { useCanvasExport } from './hooks/useCanvasExport'
 
 const PADDING = 40
 
@@ -39,62 +38,13 @@ export default function LogoTemplateBuilderPage () {
 
   const resolvedDoc = resolveTemplateDocument(doc, previewVariables)
 
-  function triggerDownload (dataUrl: string, filename: string) {
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = filename
-    a.click()
-  }
-
-  function handleExportPng () {
-    const stage = stageRef.current
-    if (!stage) return
-    const dataUrl = stage.toDataURL({
-      x: PADDING,
-      y: PADDING,
-      width: doc.canvas.width,
-      height: doc.canvas.height,
-      pixelRatio: 2
-    })
-    triggerDownload(dataUrl, 'logo-preview.png')
-  }
-
-  function handleExportJpeg () {
-    const stage = stageRef.current
-    if (!stage) return
-
-    // Add white background for JPEG (no transparency)
-    const canvas = document.createElement('canvas')
-    canvas.width = doc.canvas.width * 2
-    canvas.height = doc.canvas.height * 2
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    const pngUrl = stage.toDataURL({
-      x: PADDING,
-      y: PADDING,
-      width: doc.canvas.width,
-      height: doc.canvas.height,
-      pixelRatio: 2
-    })
-
-    const img = new Image()
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0)
-      triggerDownload(canvas.toDataURL('image/jpeg', 0.92), 'logo-preview.jpg')
-    }
-    img.src = pngUrl
-  }
-
-  function handleExportSvg () {
-    const iconVariables: Record<string, string | undefined> = {
-      'icon.primary': previewVariables.icon.primaryId
-    }
-    const svgString = exportDocumentToSvg(resolvedDoc, SAMPLE_ICONS, iconVariables)
-    const blob = new Blob([svgString], { type: 'image/svg+xml' })
-    triggerDownload(URL.createObjectURL(blob), 'logo-preview.svg')
-  }
+  const { exportPng, exportJpeg, exportSvg } = useCanvasExport({
+    stageRef,
+    doc: resolvedDoc,
+    padding: PADDING,
+    filename: 'logo-preview',
+    iconVariables: { 'icon.primary': previewVariables.icon.primaryId },
+  })
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
@@ -162,9 +112,9 @@ export default function LogoTemplateBuilderPage () {
               />
             </div>
             <ExportButtons
-              onExportPng={handleExportPng}
-              onExportJpeg={handleExportJpeg}
-              onExportSvg={handleExportSvg}
+              onExportPng={exportPng}
+              onExportJpeg={exportJpeg}
+              onExportSvg={exportSvg}
             />
           </div>
 

@@ -29,7 +29,7 @@ import {
   PopoverContent,
   Input
 } from '@heroui/react'
-import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility, type User } from '@/lib/api/client'
+import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility, type User, type DesignRequest } from '@/lib/api/client'
 
 const ACTIVITY_LIMIT = 50
 
@@ -122,6 +122,9 @@ export default function TaskDetailPage () {
   const [deleting, setDeleting] = useState(false)
   const bodyViewRef = useRef<HTMLButtonElement>(null)
 
+  // Design Requests
+  const [designRequests, setDesignRequests] = useState<DesignRequest[]>([])
+
   // Activity
   const [activity, setActivity] = useState<TaskActivity[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
@@ -176,6 +179,10 @@ export default function TaskDetailPage () {
 
     api.getMe().then(res => {
       if (res.data) setCurrentUser(res.data)
+    }).catch(() => {})
+
+    api.getDesignRequestsForTask(taskId).then(res => {
+      if (res.data) setDesignRequests(res.data)
     }).catch(() => {})
   }, [taskId])
 
@@ -741,6 +748,55 @@ export default function TaskDetailPage () {
           )}
         </CardBody>
       </Card>
+
+      {/* Design Requests */}
+      {designRequests.length > 0 && (
+        <div className="mt-6">
+          <h2 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-100">Design Requests</h2>
+          <div className="space-y-3">
+            {designRequests.map(dr => (
+              <Card key={dr.id}>
+                <CardBody className="flex flex-row items-center gap-4">
+                  <div className="flex-1 grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Design Type</p>
+                      <p className="mt-0.5 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        {dr.design_type.charAt(0) + dr.design_type.slice(1).toLowerCase()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Business Name</p>
+                      <p className="mt-0.5 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        {dr.input_data.business_name ?? '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Status</p>
+                      <div className="mt-0.5">
+                        <Chip
+                          size="sm"
+                          variant="flat"
+                          color={
+                            dr.status === 'COMPLETED' ? 'success'
+                            : dr.status === 'IN_PROGRESS' ? 'warning'
+                            : dr.status === 'FAILED' ? 'danger'
+                            : 'default'
+                          }
+                        >
+                          {formatStatus(dr.status)}
+                        </Chip>
+                      </div>
+                    </div>
+                  </div>
+                  <Button size="sm" color="primary" variant="flat" as="a" href={`/design/requests/${dr.id}`}>
+                    See My Designs
+                  </Button>
+                </CardBody>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Activity Timeline */}
       <div className="mt-6">

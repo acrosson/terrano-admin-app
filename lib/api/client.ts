@@ -146,6 +146,8 @@ export interface DesignTemplate {
   pages: DesignTemplatePage[]
 }
 
+export type PaletteTheme = 'LIGHT' | 'DARK' | 'VIBRANT'
+
 export interface ColorPalette {
   id: string
   created_at: string
@@ -158,6 +160,7 @@ export interface ColorPalette {
   secondary: string
   color_tags: string[]
   mood_tags: string[]
+  theme: PaletteTheme
   is_active: boolean
 }
 
@@ -198,6 +201,7 @@ export interface DesignProject {
   design_type: string
   title: string
   status: string
+  sort_order: number
   variables: Record<string, string>
   pages: DesignTemplatePage[]
 }
@@ -347,6 +351,7 @@ export const api = {
   async getDesignIcons (params: {
     tag?: string
     style?: string
+    usage_type?: string
     is_active?: boolean
     page?: number
     per_page?: number
@@ -354,6 +359,7 @@ export const api = {
     const q = new URLSearchParams()
     if (params.tag) q.set('tag', params.tag)
     if (params.style) q.set('style', params.style)
+    if (params.usage_type) q.set('usage_type', params.usage_type)
     if (params.is_active != null) q.set('is_active', String(params.is_active))
     if (params.page != null) q.set('page', String(params.page))
     if (params.per_page != null) q.set('per_page', String(params.per_page))
@@ -433,6 +439,10 @@ export const api = {
     return fetchApi<DesignFont>(`/v1/design/fonts/${id}`, { method: 'GET' })
   },
 
+  async getDesignRequestsForTask (taskId: string): Promise<ApiResponse<DesignRequest[]>> {
+    return fetchApi<DesignRequest[]>(`/v1/admin/design/requests?task_id=${taskId}`, { method: 'GET' })
+  },
+
   async getDesignRequests (params: {
     status?: DesignRequestStatus
     design_type?: string
@@ -474,6 +484,7 @@ export const api = {
     secondary: string
     color_tags: string[]
     mood_tags: string[]
+    theme: PaletteTheme
     is_active: boolean
   }): Promise<ApiResponse<ColorPalette>> {
     return fetchApi<ColorPalette>('/v1/admin/design/color-palettes', {
@@ -490,6 +501,7 @@ export const api = {
     secondary: string
     color_tags: string[]
     mood_tags: string[]
+    theme: PaletteTheme
     is_active: boolean
   }>): Promise<ApiResponse<ColorPalette>> {
     return fetchApi<ColorPalette>(`/v1/admin/design/color-palettes/${id}`, {

@@ -14,8 +14,7 @@ import { PreviewPanel } from '../components/PreviewPanel'
 import { ExportButtons } from '../components/ExportButtons'
 import { useEditorStore } from '../store'
 import { resolveTemplateDocument } from '../lib/resolveTemplateDocument'
-import { exportDocumentToSvg } from '../lib/exportToSvg'
-import { SAMPLE_ICONS } from '../data/sampleIcons'
+import { useCanvasExport } from '../hooks/useCanvasExport'
 import { api } from '@/lib/api/client'
 import type { TemplateDocument } from '../types'
 
@@ -134,93 +133,16 @@ export default function TemplateBuilderPage () {
 
   const resolvedDoc = resolveTemplateDocument(doc, previewVariables)
 
-  function triggerDownload (dataUrl: string, filename: string) {
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = filename
-    a.click()
-  }
-
-  function handleExportPng () {
-    const stage = stageRef.current
-    if (!stage) return
-    const bg = bgRectRef.current
-    const resolvedBg = resolvedDoc.canvas.background.toLowerCase().trim()
-    const isWhite = resolvedBg === '#ffffff' || resolvedBg === '#fff' || resolvedBg === 'white'
-
-    if (bg && isWhite) bg.fill('transparent')
-    const dataUrl = stage.toDataURL({ x: PADDING, y: PADDING, width: doc.canvas.width, height: doc.canvas.height, pixelRatio: 2 })
-    if (bg && isWhite) bg.fill(resolvedDoc.canvas.background)
-
-    if (!isWhite) {
-      triggerDownload(dataUrl, 'logo-preview.png')
-      return
-    }
-
-    // Auto-crop transparent edges
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0)
-
-      const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height)
-      let minX = width, minY = height, maxX = 0, maxY = 0
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const alpha = data[(y * width + x) * 4 + 3]
-          if (alpha > 0) {
-            if (x < minX) minX = x
-            if (x > maxX) maxX = x
-            if (y < minY) minY = y
-            if (y > maxY) maxY = y
-          }
-        }
-      }
-
-      if (maxX < minX || maxY < minY) {
-        triggerDownload(dataUrl, 'logo-preview.png')
-        return
-      }
-
-      const cropW = maxX - minX + 1
-      const cropH = maxY - minY + 1
-      const cropped = document.createElement('canvas')
-      cropped.width = cropW
-      cropped.height = cropH
-      cropped.getContext('2d')!.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH)
-      triggerDownload(cropped.toDataURL('image/png'), 'logo-preview.png')
-    }
-    img.src = dataUrl
-  }
-
-  function handleExportJpeg () {
-    const stage = stageRef.current
-    if (!stage) return
-    const canvas = document.createElement('canvas')
-    canvas.width = doc.canvas.width * 2
-    canvas.height = doc.canvas.height * 2
-    const ctx = canvas.getContext('2d')!
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-    const pngUrl = stage.toDataURL({ x: PADDING, y: PADDING, width: doc.canvas.width, height: doc.canvas.height, pixelRatio: 2 })
-    const img = new Image()
-    img.onload = () => { ctx.drawImage(img, 0, 0); triggerDownload(canvas.toDataURL('image/jpeg', 0.92), 'logo-preview.jpg') }
-    img.src = pngUrl
-  }
-
-  function handleExportSvg () {
-    const iconVariables: Record<string, string | undefined> = {
-      'icon.primary.id': previewVariables.icon.primaryId,
-      'icon.primary.url': previewVariables.icon.primaryUrl,
-    }
-    const svgString = exportDocumentToSvg(resolvedDoc, SAMPLE_ICONS, iconVariables)
-    const blob = new Blob([svgString], { type: 'image/svg+xml' })
-    triggerDownload(URL.createObjectURL(blob), 'logo-preview.svg')
-  }
+  const { exportPng: handleExportPng, exportJpeg: handleExportJpeg, exportSvg: handleExportSvg } = useCanvasExport({
+    stageRef,
+    doc: resolvedDoc,
+    padding: PADDING,
+    filename: templateName || 'logo-preview',
+    iconVariables: {
+      'icon.primary': previewVariables.icon.primaryUrl,
+    },
+    bgRectRef,
+  })
 
   if (loading) {
     return (

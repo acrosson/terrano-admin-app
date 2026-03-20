@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { Stage, Layer, Rect, Circle, Line, Text, Group, Path, Shape, Image as KonvaImage } from 'react-konva'
 import type Konva from 'konva'
-import type { TemplateDocument, EditorElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
+import type { TemplateDocument, EditorElement, CurvedTextElement, SplitTextElement, IconPlaceholderElement, PresetIconElement, GroupElement } from '../types'
 import type { PreviewVariables } from '../previewTypes'
 import { buildFontStyle } from '../hooks/useFonts'
 
@@ -151,6 +151,10 @@ function PreviewElementNode ({ el, artboardX, artboardY, variables }: PreviewNod
     return <PreviewCurvedText el={el} artboardX={artboardX} artboardY={artboardY} />
   }
 
+  if (el.type === 'split_text') {
+    return <PreviewSplitText el={el} artboardX={artboardX} artboardY={artboardY} />
+  }
+
   if (el.type === 'icon_placeholder') {
     return (
       <PreviewIconNode
@@ -158,6 +162,16 @@ function PreviewElementNode ({ el, artboardX, artboardY, variables }: PreviewNod
         artboardX={artboardX}
         artboardY={artboardY}
         variables={variables}
+      />
+    )
+  }
+
+  if (el.type === 'preset_icon') {
+    return (
+      <PreviewPresetIconNode
+        el={el}
+        artboardX={artboardX}
+        artboardY={artboardY}
       />
     )
   }
@@ -232,6 +246,49 @@ function PreviewCurvedText ({ el, artboardX, artboardY }: { el: CurvedTextElemen
   )
 }
 
+function PreviewSplitText ({ el, artboardX, artboardY }: { el: SplitTextElement; artboardX: number; artboardY: number }) {
+  return (
+    <Shape
+      x={artboardX + el.x}
+      y={artboardY + el.y}
+      rotation={el.rotation}
+      listening={false}
+      sceneFunc={(ctx) => {
+        ctx.save()
+        ctx.textBaseline = 'alphabetic'
+
+        // Measure both parts first
+        const p1Weight = el.part1.fontWeight ?? 700
+        const p1Style  = el.part1.fontStyle ?? 'normal'
+        ctx.font = `${buildFontStyle(p1Style, p1Weight)} ${el.fontSize}px "${el.fontFamily}"`
+        const p1Width = ctx.measureText(el.part1.text).width
+
+        const p2Weight = el.part2.fontWeight ?? 400
+        const p2Style  = el.part2.fontStyle ?? 'normal'
+        ctx.font = `${buildFontStyle(p2Style, p2Weight)} ${el.fontSize}px "${el.fontFamily}"`
+        const p2Width = ctx.measureText(el.part2.text).width
+
+        const totalWidth = p1Width + p2Width
+        const startX = el.align === 'center'
+          ? (el.width - totalWidth) / 2
+          : el.align === 'right'
+            ? el.width - totalWidth
+            : 0
+
+        ctx.font = `${buildFontStyle(p1Style, p1Weight)} ${el.fontSize}px "${el.fontFamily}"`
+        ctx.fillStyle = el.part1.fill ?? el.fill
+        ctx.fillText(el.part1.text, startX, 0)
+
+        ctx.font = `${buildFontStyle(p2Style, p2Weight)} ${el.fontSize}px "${el.fontFamily}"`
+        ctx.fillStyle = el.part2.fill ?? el.fill
+        ctx.fillText(el.part2.text, startX + p1Width, 0)
+
+        ctx.restore()
+      }}
+    />
+  )
+}
+
 function useCanvgIcon (
   url: string | undefined,
   width: number,
@@ -294,7 +351,9 @@ function PreviewIconNode ({
   artboardY: number
   variables: PreviewVariables
 }) {
-  const resolvedUrl = variables.icon.primaryUrl ?? el.iconPreviewUrl
+  // Resolve icon URL from bind — e.g. bind "icon.custom_brandmark" → variables.icon.custom_brandmarkUrl
+  const bindKey = el.bind?.split('.')[1]  // e.g. "primary", "custom_brandmark"
+  const resolvedUrl = (bindKey ? (variables.icon as Record<string, string | undefined>)[`${bindKey}Url`] : undefined) ?? el.iconPreviewUrl
   const canvas = useCanvgIcon(resolvedUrl, el.width, el.height, el.iconColor)
 
   if (canvas) {
@@ -315,6 +374,38 @@ function PreviewIconNode ({
   return (
     <Group x={artboardX + el.x} y={artboardY + el.y} rotation={el.rotation} listening={false}>
       <Rect width={el.width} height={el.height} stroke="#aaaaaa" strokeWidth={1} dash={[6, 4]} fill="rgba(0,0,0,0.03)" />
+    </Group>
+  )
+}
+
+function PreviewPresetIconNode ({
+  el,
+  artboardX,
+  artboardY,
+}: {
+  el: PresetIconElement
+  artboardX: number
+  artboardY: number
+}) {
+  const canvas = useCanvgIcon(el.iconUrl || undefined, el.width, el.height, el.iconColor)
+
+  if (canvas) {
+    return (
+      <KonvaImage
+        x={artboardX + el.x}
+        y={artboardY + el.y}
+        image={canvas}
+        width={el.width}
+        height={el.height}
+        rotation={el.rotation}
+        listening={false}
+      />
+    )
+  }
+
+  return (
+    <Group x={artboardX + el.x} y={artboardY + el.y} rotation={el.rotation} listening={false}>
+      <Rect width={el.width} height={el.height} stroke="#999999" strokeWidth={1} dash={[6, 4]} fill="rgba(0,0,0,0.03)" />
     </Group>
   )
 }

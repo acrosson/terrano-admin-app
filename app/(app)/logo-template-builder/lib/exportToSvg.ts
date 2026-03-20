@@ -1,4 +1,4 @@
-import type { TemplateDocument, EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, IconPlaceholderElement, GroupElement } from '../types'
+import type { TemplateDocument, EditorElement, RectElement, CircleElement, LineElement, TextElement, CurvedTextElement, SplitTextElement, IconPlaceholderElement, PresetIconElement, GroupElement } from '../types'
 import type { SampleIcon } from '../data/sampleIcons'
 
 function escapeXml (s: string): string {
@@ -60,6 +60,15 @@ function renderCurvedText (el: CurvedTextElement, idPrefix: string): string {
   </text>`
 }
 
+function renderSplitText (el: SplitTextElement): string {
+  const p1Fill = el.part1.fill ?? el.fill
+  const p2Fill = el.part2.fill ?? el.fill
+  return `<text x="${el.x}" y="${el.y}" font-family="${escapeXml(el.fontFamily)}" font-size="${el.fontSize}"${el.rotation !== 0 ? ` transform="rotate(${el.rotation} ${el.x} ${el.y})"` : ''}>` +
+    `<tspan font-weight="${el.part1.fontWeight ?? 700}" font-style="${el.part1.fontStyle ?? 'normal'}" fill="${escapeXml(p1Fill)}">${escapeXml(el.part1.text)}</tspan>` +
+    `<tspan font-weight="${el.part2.fontWeight ?? 400}" font-style="${el.part2.fontStyle ?? 'normal'}" fill="${escapeXml(p2Fill)}">${escapeXml(el.part2.text)}</tspan>` +
+    `</text>`
+}
+
 function renderIconPlaceholder (el: IconPlaceholderElement, icons: SampleIcon[], iconId: string | undefined, iconUrl: string | undefined): string {
   const icon = icons.find(i => i.id === iconId)
   const cx = el.x + el.width / 2
@@ -83,6 +92,15 @@ function renderIconPlaceholder (el: IconPlaceholderElement, icons: SampleIcon[],
   return `<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" fill="none" stroke="#aaaaaa" stroke-width="1" stroke-dasharray="6 4"${rotateTransform(el.rotation, cx, cy)}/>`
 }
 
+function renderPresetIcon (el: PresetIconElement): string {
+  const cx = el.x + el.width / 2
+  const cy = el.y + el.height / 2
+  if (el.iconUrl) {
+    return `<image x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" href="${escapeXml(el.iconUrl)}"${rotateTransform(el.rotation, cx, cy)}/>`
+  }
+  return `<rect x="${el.x}" y="${el.y}" width="${el.width}" height="${el.height}" fill="none" stroke="#aaaaaa" stroke-width="1" stroke-dasharray="6 4"${rotateTransform(el.rotation, cx, cy)}/>`
+}
+
 function renderElement (el: EditorElement, icons: SampleIcon[], iconVars: Record<string, string | undefined>): string {
   switch (el.type) {
     case 'rect': return renderRect(el)
@@ -90,6 +108,8 @@ function renderElement (el: EditorElement, icons: SampleIcon[], iconVars: Record
     case 'line': return renderLine(el)
     case 'text': return renderText(el)
     case 'curved_text': return renderCurvedText(el, el.id)
+    case 'split_text': return renderSplitText(el)
+    case 'preset_icon': return renderPresetIcon(el)
     case 'icon_placeholder': {
       const iconId = el.bind ? iconVars[`${el.bind}.id`] : undefined
       const iconUrl = el.bind ? iconVars[`${el.bind}.url`] : undefined
