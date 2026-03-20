@@ -443,6 +443,10 @@ export const api = {
     return fetchApi<DesignRequest[]>(`/v1/admin/design/requests?task_id=${taskId}`, { method: 'GET' })
   },
 
+  async createDesignRequest (body: { design_type: string; task_id: string; include_ai_generated: boolean }): Promise<ApiResponse<DesignRequest>> {
+    return fetchApi<DesignRequest>('/v1/admin/design/requests', { method: 'POST', body: JSON.stringify(body) })
+  },
+
   async getDesignRequests (params: {
     status?: DesignRequestStatus
     design_type?: string

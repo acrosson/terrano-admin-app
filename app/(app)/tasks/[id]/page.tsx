@@ -27,7 +27,8 @@ import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-  Input
+  Input,
+  Switch
 } from '@heroui/react'
 import { api, type Task, type TaskUserRef, type TaskStatus, type TaskActivity, type TaskActivityVisibility, type User, type DesignRequest } from '@/lib/api/client'
 
@@ -124,6 +125,9 @@ export default function TaskDetailPage () {
 
   // Design Requests
   const [designRequests, setDesignRequests] = useState<DesignRequest[]>([])
+  const [newDesignRequestModalOpen, setNewDesignRequestModalOpen] = useState(false)
+  const [includeAiGenerated, setIncludeAiGenerated] = useState(true)
+  const [creatingDesignRequest, setCreatingDesignRequest] = useState(false)
 
   // Activity
   const [activity, setActivity] = useState<TaskActivity[]>([])
@@ -182,7 +186,7 @@ export default function TaskDetailPage () {
     }).catch(() => {})
 
     api.getDesignRequestsForTask(taskId).then(res => {
-      if (res.data) setDesignRequests(res.data)
+      if (res.data) setDesignRequests(res.data.slice().sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
     }).catch(() => {})
   }, [taskId])
 
@@ -757,7 +761,7 @@ export default function TaskDetailPage () {
             {designRequests.map(dr => (
               <Card key={dr.id}>
                 <CardBody className="flex flex-row items-center gap-4">
-                  <div className="flex-1 grid grid-cols-3 gap-4">
+                  <div className="flex-1 grid grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Design Type</p>
                       <p className="mt-0.5 text-sm font-medium text-zinc-800 dark:text-zinc-200">
@@ -787,6 +791,12 @@ export default function TaskDetailPage () {
                         </Chip>
                       </div>
                     </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Created At</p>
+                      <p className="mt-0.5 text-sm text-zinc-800 dark:text-zinc-200">
+                        {formatDateTime(dr.created_at)}
+                      </p>
+                    </div>
                   </div>
                   <Button size="sm" color="primary" variant="flat" as="a" href={`/design/requests/${dr.id}`}>
                     See My Designs
@@ -797,6 +807,13 @@ export default function TaskDetailPage () {
           </div>
         </div>
       )}
+
+      {/* New Design Request button — always visible below the section */}
+      <div className="mt-3">
+        <Button size="sm" variant="flat" onPress={() => setNewDesignRequestModalOpen(true)}>
+          New Design Request
+        </Button>
+      </div>
 
       {/* Activity Timeline */}
       <div className="mt-6">
@@ -1019,6 +1036,59 @@ export default function TaskDetailPage () {
                   isLoading={deleting}
                 >
                   Delete
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={newDesignRequestModalOpen}
+        onOpenChange={open => {
+          setNewDesignRequestModalOpen(open)
+          if (!open) setIncludeAiGenerated(true)
+        }}
+        placement="center"
+        size="sm"
+      >
+        <ModalContent>
+          {(onClose) => (
+            <>
+              <ModalHeader>New Design Request</ModalHeader>
+              <ModalBody>
+                <Switch
+                  isSelected={includeAiGenerated}
+                  onValueChange={setIncludeAiGenerated}
+                >
+                  Include AI Generated
+                </Switch>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="light" onPress={onClose} isDisabled={creatingDesignRequest}>
+                  Cancel
+                </Button>
+                <Button
+                  color="primary"
+                  isLoading={creatingDesignRequest}
+                  onPress={async () => {
+                    setCreatingDesignRequest(true)
+                    try {
+                      const res = await api.createDesignRequest({
+                        design_type: 'LOGO',
+                        task_id: taskId,
+                        include_ai_generated: includeAiGenerated,
+                      })
+                      if (res.data) setDesignRequests(prev => [...prev, res.data!].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()))
+                      onClose()
+                    } catch (err) {
+                      console.error('Failed to create design request:', err)
+                    } finally {
+                      setCreatingDesignRequest(false)
+                    }
+                  }}
+                >
+                  Create
                 </Button>
               </ModalFooter>
             </>
